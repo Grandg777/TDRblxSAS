@@ -1,162 +1,70 @@
--- Сканер структуры всех модулей в Mods
--- Выводит полную иерархию и сохраняет в файл
+-- Сканер только скриптов в Mods
+-- Простой вывод только ModuleScript, LocalScript, Script
 
-print("🔍 Сканируем структуру ReplicatedStorage.Mods...")
+print("🔍 Сканируем только скрипты в Mods...")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
+local Mods = ReplicatedStorage:WaitForChild("Mods")
 
--- Функция для рекурсивного сканирования
-local function scanObject(obj, depth, output)
-    depth = depth or 0
+-- Функция для рекурсивного поиска скриптов
+local function findScripts(obj, path, output)
+    path = path or ""
     output = output or {}
     
-    local indent = string.rep("  ", depth)
-    local icon = "📄"
+    local currentPath = path == "" and obj.Name or path .. "." .. obj.Name
     
-    -- Выбираем иконку по типу объекта
-    if obj:IsA("ModuleScript") then
-        icon = "📦"
-    elseif obj:IsA("LocalScript") then
-        icon = "📜"
-    elseif obj:IsA("Script") then
-        icon = "📋"
-    elseif obj:IsA("Folder") then
-        icon = "📁"
-    elseif obj:IsA("Configuration") then
-        icon = "⚙️"
-    elseif obj:IsA("StringValue") or obj:IsA("IntValue") or obj:IsA("NumberValue") then
-        icon = "💾"
-    end
-    
-    -- Формируем строку информации
-    local info = string.format("%s%s %s (%s)", indent, icon, obj.Name, obj.ClassName)
-    
-    -- Добавляем дополнительную информацию для значений
-    if obj:IsA("StringValue") and obj.Value ~= "" then
-        info = info .. " = \"" .. obj.Value .. "\""
-    elseif obj:IsA("IntValue") or obj:IsA("NumberValue") then
-        info = info .. " = " .. tostring(obj.Value)
-    elseif obj:IsA("BoolValue") then
-        info = info .. " = " .. tostring(obj.Value)
-    end
-    
-    table.insert(output, info)
-    print(info)
-    
-    -- Рекурсивно сканируем дочерние объекты
-    local children = obj:GetChildren()
-    if #children > 0 then
-        -- Сортируем детей по типу (сначала папки, потом скрипты, потом остальное)
-        table.sort(children, function(a, b)
-            local aWeight = a:IsA("Folder") and 1 or (a:IsA("ModuleScript") and 2) or 3
-            local bWeight = b:IsA("Folder") and 1 or (b:IsA("ModuleScript") and 2) or 3
-            if aWeight == bWeight then
-                return a.Name < b.Name
-            end
-            return aWeight < bWeight
-        end)
+    -- Если это скрипт - добавляем в список
+    if obj:IsA("ModuleScript") or obj:IsA("LocalScript") or obj:IsA("Script") then
+        local icon = "📦"
+        if obj:IsA("LocalScript") then icon = "📜"
+        elseif obj:IsA("Script") then icon = "📋" end
         
-        for _, child in ipairs(children) do
-            scanObject(child, depth + 1, output)
-        end
+        local line = icon .. " " .. currentPath .. " (" .. obj.ClassName .. ")"
+        table.insert(output, line)
+        print(line)
+    end
+    
+    -- Ищем в дочерних объектах
+    for _, child in pairs(obj:GetChildren()) do
+        findScripts(child, currentPath, output)
     end
     
     return output
 end
 
--- Начинаем сканирование
-local Mods = ReplicatedStorage:WaitForChild("Mods")
-print("📂 Сканируем: " .. Mods:GetFullName())
+-- Собираем все скрипты
+local scriptsList = findScripts(Mods)
+
+-- Выводим результат в консоль (так как файл не сохраняется)
+print("\n" .. string.rep("=", 50))
+print("📋 СПИСОК ВСЕХ СКРИПТОВ В MODS:")
+print(string.rep("=", 50))
+
+for i, script in ipairs(scriptsList) do
+    print(i .. ". " .. script)
+end
+
+print("\n📊 Всего найдено скриптов: " .. #scriptsList)
 print("🎮 Игра ID: " .. game.PlaceId)
-print("👤 Игрок: " .. LocalPlayer.Name)
 print("⏰ Время: " .. os.date())
-print(string.rep("=", 60))
 
-local output = {}
-
--- Добавляем заголовок в файл
-table.insert(output, "-- СТРУКТУРА МОДУЛЕЙ TOWER DEFENSE")
-table.insert(output, "-- Игра ID: " .. game.PlaceId)
-table.insert(output, "-- Игрок: " .. LocalPlayer.Name)
-table.insert(output, "-- Время сканирования: " .. os.date())
-table.insert(output, "-- Путь: " .. Mods:GetFullName())
-table.insert(output, string.rep("=", 60))
-table.insert(output, "")
-
--- Сканируем основную папку Mods
-scanObject(Mods, 0, output)
-
--- Добавляем статистику
-table.insert(output, "")
-table.insert(output, string.rep("=", 60))
-table.insert(output, "📊 СТАТИСТИКА:")
-
-local stats = {
-    ModuleScript = 0,
-    LocalScript = 0,
-    Script = 0,
-    Folder = 0,
-    Total = 0
-}
-
-for _, obj in pairs(Mods:GetDescendants()) do
-    stats.Total = stats.Total + 1
-    if obj:IsA("ModuleScript") then
-        stats.ModuleScript = stats.ModuleScript + 1
-    elseif obj:IsA("LocalScript") then
-        stats.LocalScript = stats.LocalScript + 1
-    elseif obj:IsA("Script") then
-        stats.Script = stats.Script + 1
-    elseif obj:IsA("Folder") then
-        stats.Folder = stats.Folder + 1
-    end
+-- Пытаемся сохранить простым способом
+local content = "-- СКРИПТЫ В MODS\n-- Игра: " .. game.PlaceId .. "\n-- Время: " .. os.date() .. "\n\n"
+for i, script in ipairs(scriptsList) do
+    content = content .. i .. ". " .. script .. "\n"
 end
 
-table.insert(output, "📦 ModuleScript: " .. stats.ModuleScript)
-table.insert(output, "📜 LocalScript: " .. stats.LocalScript)
-table.insert(output, "📋 Script: " .. stats.Script)
-table.insert(output, "📁 Folder: " .. stats.Folder)
-table.insert(output, "📄 Всего объектов: " .. stats.Total)
-
--- Добавляем список всех ModuleScript для быстрого поиска
-table.insert(output, "")
-table.insert(output, "🎯 СПИСОК ВСЕХ MODULESCRIPT:")
-local modulesList = {}
-for _, obj in pairs(Mods:GetDescendants()) do
-    if obj:IsA("ModuleScript") then
-        table.insert(modulesList, obj:GetFullName():gsub("game%.ReplicatedStorage%.Mods%.", ""))
-    end
-end
-table.sort(modulesList)
-for i, modulePath in ipairs(modulesList) do
-    table.insert(output, i .. ". " .. modulePath)
-end
-
--- Сохраняем в файл
-local filename = "ModsStructure_" .. game.PlaceId .. "_" .. os.date("%H%M%S") .. ".txt"
-local content = table.concat(output, "\n")
-
-local success, error_msg = pcall(function()
-    writefile(filename, content)
+-- Без создания папок, просто файл
+local success = pcall(function()
+    writefile("scripts_list.txt", content)
 end)
 
 if success then
-    print("\n✅ Структура сохранена в файл: " .. filename)
-    print("📁 Размер файла: " .. #content .. " символов")
-    print("📊 Всего строк: " .. #output)
+    print("✅ Список сохранен в scripts_list.txt")
 else
-    print("\n❌ Ошибка сохранения: " .. tostring(error_msg))
-    print("📋 Выводим содержимое в консоль:")
-    print(string.rep("=", 60))
-    for _, line in ipairs(output) do
-        print(line)
-    end
+    print("❌ Файл не сохранился, но список выведен выше")
+    print("📝 Скопируй список из консоли и пришли мне")
 end
 
-print("\n🎯 Что делать дальше:")
-print("1. Скинь мне содержимое файла " .. filename)
-print("2. Я скажу какие модули декомпилировать в первую очередь")
-print("3. Сделаем автофарм на основе приоритетных модулей")
-print("4. Profit! 💰")
+print("\n🎯 Скопируй этот список и пришли мне!")
+print("Я скажу какие модули декомпилировать в первую очередь")
