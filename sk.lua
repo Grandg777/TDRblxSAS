@@ -35,41 +35,120 @@ local function getGameUI()
         
         if not gu or not mainUI then return nil end
         
+        local menuFrame = gu:FindFirstChild("MenuFrame")
+        local topFrame = menuFrame and menuFrame:FindFirstChild("TopFrame")
+        local resultFrame = mainUI:FindFirstChild("ResultFrame")
+        
+        if not topFrame then return nil end
+        
         return {
-            skipButton = gu.MenuFrame.TopFrame:FindFirstChild("Skip"),
-            startButton = gu.MenuFrame.TopFrame:FindFirstChild("Start"),
-            resultFrame = mainUI:FindFirstChild("ResultFrame")
+            skipButton = topFrame:FindFirstChild("Skip"),
+            startButton = topFrame:FindFirstChild("Start"),
+            resultFrame = resultFrame
         }
     end)
     
     return success and result or nil
 end
 
+-- Переменные для предотвращения спама
+local lastActions = {
+    skip = 0,
+    start = 0,
+    replay = 0
+}
+
 -- Функции автоматизации
 local function sendSkip()
+    local currentTime = tick()
+    if currentTime - lastActions.skip < 2 then return end -- Защита от спама
+    
     local success = pcall(function()
-        game.ReplicatedStorage.Remotes.SetEvent:FireServer("GameStuff", {"Skip"})
+        local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+        local gameStuff = remotes and remotes:FindFirstChild("GameStuff")
+        
+        if not gameStuff then
+            warn("❌ GameStuff remote не найден")
+            return
+        end
+        
+        local args = {"SkipVoteYes"}
+        gameStuff:FireServer(unpack(args))
+        lastActions.skip = currentTime
     end)
+    
     if success then
         print("⏩ Скип отправлен")
+    else
+        warn("❌ Ошибка отправки скипа")
     end
 end
 
 local function sendStart()
+    local currentTime = tick()
+    if currentTime - lastActions.start < 2 then return end -- Защита от спама
+    
     local success = pcall(function()
-        game.ReplicatedStorage.Remotes.SetEvent:FireServer("GameStuff", {"Start"})
+        local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+        local gameStuff = remotes and remotes:FindFirstChild("GameStuff")
+        
+        if not gameStuff then
+            warn("❌ GameStuff remote не найден")
+            return
+        end
+        
+        local args = {"StartVoteYes"}
+        gameStuff:FireServer(unpack(args))
+        lastActions.start = currentTime
     end)
+    
     if success then
         print("▶️ Старт отправлен")
+    else
+        warn("❌ Ошибка отправки старта")
     end
 end
 
 local function sendReplay()
+    local currentTime = tick()
+    if currentTime - lastActions.replay < 5 then return end -- Защита от спама
+    
     local success = pcall(function()
-        game.ReplicatedStorage.Remotes.SetEvent:FireServer("GameStuff", {"Replay"})
+        local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+        local getFunction = remotes and remotes:FindFirstChild("GetFunction")
+        
+        if not getFunction then
+            warn("❌ GetFunction remote не найден")
+            return
+        end
+        
+        -- Первый запрос - Replay
+        local args1 = {
+            {
+                Type = "Game",
+                Index = "Replay",
+                Mode = "Reward"
+            }
+        }
+        getFunction:InvokeServer(unpack(args1))
+        
+        -- Второй запрос - Map (через небольшую задержку)
+        wait(0.5)
+        local args2 = {
+            {
+                Type = "Map",
+                Mode = "Get"
+            }
+        }
+        getFunction:InvokeServer(unpack(args2))
+        
+        lastActions.replay = currentTime
     end)
+    
     if success then
         print("🔄 Replay отправлен")
+    else
+        warn("❌ Ошибка отправки replay")
     end
 end
 
@@ -251,14 +330,17 @@ local function createGUI()
         settings.autoReplay = false
         
         -- Отключаем все соединения
-        for _, connection in pairs(connections) do
-            if connection then
+        for i, connection in ipairs(connections) do
+            if connection and connection.Connected then
                 connection:Disconnect()
             end
         end
+        connections = {}
         
-        -- Удаляем GUI
-        screenGui:Destroy()
+        -- Удаляем GUI немедленно
+        if screenGui and screenGui.Parent then
+            screenGui:Destroy()
+        end
         gui = nil
         
         print("✅ GUI закрыт, все функции отключены")
@@ -299,32 +381,49 @@ end
 -- Основная логика автоматизации
 local function startAutomation()
     local replayStartTime = 0
+    local lastSkipVisible = false
+    local lastStartVisible = false
+    local lastResultVisible = false
     
     local connection = RunService.Heartbeat:Connect(function()
+        if not gui then return end -- Останавливаем если GUI закрыт
+        
         local gameUI = getGameUI()
         if not gameUI then return end
         
-        -- Auto Skip
-        if settings.autoSkip and gameUI.skipButton and gameUI.skipButton.Visible then
-            sendSkip()
+        -- Auto Skip - отправляем только при изменении видимости
+        if settings.autoSkip and gameUI.skipButton then
+            local isVisible = gameUI.skipButton.Visible
+            if isVisible and not lastSkipVisible then
+                sendSkip()
+            end
+            lastSkipVisible = isVisible
         end
         
-        -- Auto Start
-        if settings.autoStart and gameUI.startButton and gameUI.startButton.Visible then
-            sendStart()
+        -- Auto Start - отправляем только при изменении видимости
+        if settings.autoStart and gameUI.startButton then
+            local isVisible = gameUI.startButton.Visible
+            if isVisible and not lastStartVisible then
+                sendStart()
+            end
+            lastStartVisible = isVisible
         end
         
-        -- Auto Replay
-        if settings.autoReplay and gameUI.resultFrame and gameUI.resultFrame.Visible then
-            if replayStartTime == 0 then
+        -- Auto Replay - отправляем только при изменении видимости + 5 сек задержка
+        if settings.autoReplay and gameUI.resultFrame then
+            local isVisible = gameUI.resultFrame.Visible
+            
+            if isVisible and not lastResultVisible then
                 replayStartTime = tick()
                 print("⏱️ Результат показан, жду 5 секунд для Replay...")
-            elseif tick() - replayStartTime >= 5 then
+            elseif isVisible and replayStartTime > 0 and tick() - replayStartTime >= 5 then
                 sendReplay()
                 replayStartTime = 0
+            elseif not isVisible then
+                replayStartTime = 0
             end
-        else
-            replayStartTime = 0
+            
+            lastResultVisible = isVisible
         end
     end)
     
