@@ -386,11 +386,26 @@ local function createGUI()
     moneyCorner.CornerRadius = UDim.new(0, 6)
     moneyCorner.Parent = moneyButton
     
+    -- Контейнер для кнопок спавна
+    local spawnFrame = Instance.new("Frame")
+    spawnFrame.Name = "SpawnFrame"
+    spawnFrame.Size = UDim2.new(1, 0, 0, 25)
+    spawnFrame.BackgroundTransparency = 1
+    spawnFrame.LayoutOrder = 5
+    spawnFrame.Parent = contentFrame
+
+    local spawnLayout = Instance.new("UIListLayout")
+    spawnLayout.FillDirection = Enum.FillDirection.Horizontal
+    spawnLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    spawnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    spawnLayout.Padding = UDim.new(0, 5)
+    spawnLayout.Parent = spawnFrame
+
     -- Функция создания кнопки фарма
     local function createFarmButton(name, text, color, layoutOrder)
         local button = Instance.new("TextButton")
         button.Name = name
-        button.Size = UDim2.new(0.48, 0, 0, 25)
+        button.Size = UDim2.new(0, 110, 0, 25)
         button.BackgroundColor3 = color
         button.BorderSizePixel = 0
         button.Text = text
@@ -398,7 +413,7 @@ local function createGUI()
         button.TextScaled = true
         button.Font = Enum.Font.SourceSans
         button.LayoutOrder = layoutOrder
-        button.Parent = contentFrame
+        button.Parent = spawnFrame
         
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 4)
@@ -406,40 +421,26 @@ local function createGUI()
         
         return button
     end
-    
-    -- Контейнер для кнопок спавна (2 в ряд)
-    local spawnFrame = Instance.new("Frame")
-    spawnFrame.Name = "SpawnFrame"
-    spawnFrame.Size = UDim2.new(1, 0, 0, 25)
-    spawnFrame.BackgroundTransparency = 1
-    spawnFrame.LayoutOrder = 5
-    spawnFrame.Parent = contentFrame
-    
-    local spawnLayout = Instance.new("UIListLayout")
-    spawnLayout.FillDirection = Enum.FillDirection.Horizontal
-    spawnLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween
-    spawnLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    spawnLayout.Parent = spawnFrame
-    
+
+    -- Создание кнопок спавна
     local spawnFarm1 = createFarmButton("SpawnFarm1", "Spawn F1", Color3.fromRGB(85, 255, 85), 1)
-    spawnFarm1.Parent = spawnFrame
     local spawnFarm2 = createFarmButton("SpawnFarm2", "Spawn F2", Color3.fromRGB(85, 255, 85), 2)
-    spawnFarm2.Parent = spawnFrame
-    
-    -- Контейнер для кнопок улучшения (2 в ряд)
+
+    -- Контейнер для кнопок улучшения
     local upgradeFrame = Instance.new("Frame")
     upgradeFrame.Name = "UpgradeFrame"
     upgradeFrame.Size = UDim2.new(1, 0, 0, 25)
     upgradeFrame.BackgroundTransparency = 1
     upgradeFrame.LayoutOrder = 6
     upgradeFrame.Parent = contentFrame
-    
+
     local upgradeLayout = Instance.new("UIListLayout")
     upgradeLayout.FillDirection = Enum.FillDirection.Horizontal
-    upgradeLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween
+    upgradeLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     upgradeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    upgradeLayout.Padding = UDim.new(0, 5)
     upgradeLayout.Parent = upgradeFrame
-    
+
     local upgradeFarm1 = createFarmButton("UpgradeFarm1", "UF1 - 0/5", Color3.fromRGB(255, 170, 85), 1)
     upgradeFarm1.Parent = upgradeFrame
     local upgradeFarm2 = createFarmButton("UpgradeFarm2", "UF2 - 0/5", Color3.fromRGB(255, 170, 85), 2)
@@ -502,7 +503,7 @@ local function createGUI()
         settings.autoReplay = false
         
         -- Отключаем все соединения
-        for i, connection in ipairs(connections) do
+        for i, connection in ipairs(con.connections) do
             if connection and connection.Connected then
                 connection:Disconnect()
             end
