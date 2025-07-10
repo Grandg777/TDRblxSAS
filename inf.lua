@@ -715,31 +715,6 @@ function library:init()
         end
     end)
 
--- Кнопка закрытия
-objs.closeButton = utility:Draw('Square', {
-    Size = newUDim2(0,20,0,16);
-    Position = newUDim2(1,-25,0,2);
-    ThemeColor = 'Border 1';
-    ZIndex = z+2;
-    Parent = objs.midBorder;
-})
-
-objs.closeText = utility:Draw('Text', {
-    Position = newUDim2(.5,0,.5,0);
-    ThemeColor = 'Primary Text';
-    Text = '✕';
-    Size = 12;
-    Font = 2;
-    ZIndex = z+3;
-    Center = true;
-    Outline = true;
-    Parent = objs.closeButton;
-})
-
-utility:Connection(objs.closeButton.MouseButton1Down, function()
-    library:Unload()
-end)
-
     utility:Connection(inputservice.InputChanged, function(input, gpe)
         if input.UserInputType == Enum.UserInputType.MouseMovement then
             if library.open then
