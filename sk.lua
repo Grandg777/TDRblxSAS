@@ -1,82 +1,101 @@
--- Декомпилятор подмодулей SquadMod
--- Попробуем декомпилировать каждый подмодуль отдельно
+-- SaveInstance - сохраняет всю игру со скриптами
+-- Это самый мощный способ получить все скрипты игры
 
-print("🎯 Декомпилируем подмодули SquadMod...")
+print("💾 Запускаем SaveInstance...")
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local SquadMod = ReplicatedStorage.Mods.SquadMod
+-- Проверяем доступность функции
+if not saveinstance then
+    print("❌ saveinstance недоступен в этом эмуляторе")
+    print("💡 Попробуй Synapse X, Script-Ware или другой продвинутый эмулятор")
+    return
+end
 
--- Приоритетные модули для автофарма
-local priorityModules = {
-    "UnitInfo",    -- Информация о юнитах
-    "LevelMod",    -- Уровни и улучшения  
-    "SellMod",     -- Продажа юнитов
-    "SlotsMod",    -- Слоты для юнитов
-    "ViewMod"      -- Отображение
-}
+print("✅ saveinstance доступен!")
 
--- Функция декомпиляции одного модуля
-local function decompileModule(module)
-    local success, result = pcall(function()
-        if decompile then
-            return decompile(module)
-        elseif getscriptclosure then
-            local closure = getscriptclosure(module)
-            if closure and decompileFunction then
-                return decompileFunction(closure)
-            end
-        end
-        error("Декомпилятор недоступен")
-    end)
+-- Базовое сохранение всей игры
+print("🔄 Сохраняем всю игру...")
+saveinstance()
+print("✅ Игра сохранена в папку по умолчанию")
+
+-- Продвинутое сохранение с настройками
+print("🔄 Сохраняем с расширенными настройками...")
+
+saveinstance({
+    -- Основные настройки
+    SavePlayers = false,        -- Не сохранять других игроков
+    SaveNonCreatable = true,    -- Сохранить все объекты
+    DecompileScripts = true,    -- Декомпилировать скрипты
+    DecompileModules = true,    -- Декомпилировать модули
+    SaveBytecode = false,       -- Не сохранять байткод
     
-    if success and result and #result > 50 then
-        return result
-    else
-        return "-- FAILED TO DECOMPILE: " .. module.Name .. 
-               "\n-- Error: " .. tostring(result) ..
-               "\n-- [SOURCE CODE NOT AVAILABLE]"
-    end
+    -- Путь сохранения  
+    mode = "optimized",         -- Оптимизированный режим
+    
+    -- Дополнительные опции
+    timeout = 10,               -- Таймаут в секундах
+    RemovePlayerCharacters = true, -- Убрать персонажей игроков
+    
+    -- Что сохранять
+    SaveWorkspace = true,       -- Сохранить workspace (карту)
+    SaveReplicatedStorage = true, -- Сохранить ReplicatedStorage
+    SaveReplicatedFirst = true, -- Сохранить ReplicatedFirst
+    SaveServerStorage = false,  -- ServerStorage недоступен клиенту
+    SaveServerScriptService = false, -- ServerScriptService недоступен
+    SaveStarterGui = true,      -- Сохранить StarterGui
+    SaveStarterPack = true,     -- Сохранить StarterPack
+    SaveStarterPlayer = true,   -- Сохранить StarterPlayer
+    SaveSoundService = true,    -- Сохранить SoundService
+    SaveLighting = true,        -- Сохранить Lighting
+    SaveMaterialService = true  -- Сохранить MaterialService
+})
+
+print("✅ Расширенное сохранение завершено!")
+
+-- Сохранение только ReplicatedStorage.Mods
+print("🎯 Сохраняем только папку Mods...")
+
+local success, error_msg = pcall(function()
+    saveinstance({
+        Instance = game.ReplicatedStorage.Mods,
+        DecompileScripts = true,
+        DecompileModules = true,
+        SaveNonCreatable = true,
+        mode = "optimized"
+    })
+end)
+
+if success then
+    print("✅ Папка Mods сохранена отдельно")
+else
+    print("❌ Ошибка сохранения Mods: " .. tostring(error_msg))
 end
 
--- Декомпилируем приоритетные модули
-for _, moduleName in ipairs(priorityModules) do
-    local module = SquadMod:FindFirstChild(moduleName)
-    if module then
-        print("🔧 Декомпилируем: " .. moduleName)
-        
-        local decompiled = decompileModule(module)
-        
-        local header = [[-- ]] .. moduleName .. [[ Decompiled
--- From: SquadMod.]] .. moduleName .. [[
--- Game: ]] .. game.PlaceId .. [[
--- Time: ]] .. os.date() .. [[
+-- Информация о сохранении
+print("\n📁 Файлы сохранены в:")
+print("- workspace/[GameName]/ - полная игра")
+print("- workspace/Mods/ - только модули")
 
-]]
-        
-        local content = header .. decompiled
-        local filename = "SquadMod_" .. moduleName .. ".lua"
-        
-        local success, error_msg = pcall(function()
-            writefile(filename, content)
-        end)
-        
-        if success then
-            print("✅ " .. moduleName .. " сохранен")
-        else
-            print("❌ Ошибка " .. moduleName .. ": " .. tostring(error_msg))
-        end
-    else
-        print("❌ Модуль не найден: " .. moduleName)
-    end
-end
+print("\n📋 Что найдешь в сохраненных файлах:")
+print("✅ Все декомпилированные .lua скрипты")
+print("✅ Структуру карты и объектов")
+print("✅ GUI элементы")
+print("✅ Настройки освещения и звуков")
+print("✅ Все модули из ReplicatedStorage")
 
--- Показываем все доступные модули
-print("\n📋 Все подмодули SquadMod:")
-for i, child in pairs(SquadMod:GetChildren()) do
-    print("  " .. i .. ". " .. child.Name .. " (" .. child.ClassName .. ")")
-end
+print("\n🎯 Ищи эти файлы:")
+print("- ReplicatedStorage/Mods/SquadMod.lua")
+print("- ReplicatedStorage/Mods/MenuMod.lua") 
+print("- StarterGui/[MainUI]/LocalScript.lua")
+print("- ReplicatedStorage/Remotes/ - все Remote события")
 
-print("\n💡 Если декомпиляция не работает, попробуй:")
-print("1. Другой эмулятор с лучшим декомпилятором")
-print("2. Анализ через require() и вывод функций")
-print("3. Отслеживание RemoteEvents вместо декомпиляции")
+print("\n💡 Если saveinstance не сработал:")
+print("1. Убедись что эмулятор поддерживает эту функцию")
+print("2. Попробуй другой эмулятор (Synapse X, Script-Ware)")
+print("3. Проверь есть ли папка workspace после выполнения")
+
+-- Дополнительная информация
+print("\n📊 Информация об игре:")
+print("Game ID:", game.PlaceId)
+print("Game Name:", game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown")
+print("Creator:", game.CreatorType == Enum.CreatorType.User and "User" or "Group")
+print("Creator ID:", game.CreatorId)
