@@ -1,101 +1,162 @@
--- SaveInstance - сохраняет всю игру со скриптами
--- Это самый мощный способ получить все скрипты игры
+-- Сканер структуры всех модулей в Mods
+-- Выводит полную иерархию и сохраняет в файл
 
-print("💾 Запускаем SaveInstance...")
+print("🔍 Сканируем структуру ReplicatedStorage.Mods...")
 
--- Проверяем доступность функции
-if not saveinstance then
-    print("❌ saveinstance недоступен в этом эмуляторе")
-    print("💡 Попробуй Synapse X, Script-Ware или другой продвинутый эмулятор")
-    return
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Функция для рекурсивного сканирования
+local function scanObject(obj, depth, output)
+    depth = depth or 0
+    output = output or {}
+    
+    local indent = string.rep("  ", depth)
+    local icon = "📄"
+    
+    -- Выбираем иконку по типу объекта
+    if obj:IsA("ModuleScript") then
+        icon = "📦"
+    elseif obj:IsA("LocalScript") then
+        icon = "📜"
+    elseif obj:IsA("Script") then
+        icon = "📋"
+    elseif obj:IsA("Folder") then
+        icon = "📁"
+    elseif obj:IsA("Configuration") then
+        icon = "⚙️"
+    elseif obj:IsA("StringValue") or obj:IsA("IntValue") or obj:IsA("NumberValue") then
+        icon = "💾"
+    end
+    
+    -- Формируем строку информации
+    local info = string.format("%s%s %s (%s)", indent, icon, obj.Name, obj.ClassName)
+    
+    -- Добавляем дополнительную информацию для значений
+    if obj:IsA("StringValue") and obj.Value ~= "" then
+        info = info .. " = \"" .. obj.Value .. "\""
+    elseif obj:IsA("IntValue") or obj:IsA("NumberValue") then
+        info = info .. " = " .. tostring(obj.Value)
+    elseif obj:IsA("BoolValue") then
+        info = info .. " = " .. tostring(obj.Value)
+    end
+    
+    table.insert(output, info)
+    print(info)
+    
+    -- Рекурсивно сканируем дочерние объекты
+    local children = obj:GetChildren()
+    if #children > 0 then
+        -- Сортируем детей по типу (сначала папки, потом скрипты, потом остальное)
+        table.sort(children, function(a, b)
+            local aWeight = a:IsA("Folder") and 1 or (a:IsA("ModuleScript") and 2) or 3
+            local bWeight = b:IsA("Folder") and 1 or (b:IsA("ModuleScript") and 2) or 3
+            if aWeight == bWeight then
+                return a.Name < b.Name
+            end
+            return aWeight < bWeight
+        end)
+        
+        for _, child in ipairs(children) do
+            scanObject(child, depth + 1, output)
+        end
+    end
+    
+    return output
 end
 
-print("✅ saveinstance доступен!")
+-- Начинаем сканирование
+local Mods = ReplicatedStorage:WaitForChild("Mods")
+print("📂 Сканируем: " .. Mods:GetFullName())
+print("🎮 Игра ID: " .. game.PlaceId)
+print("👤 Игрок: " .. LocalPlayer.Name)
+print("⏰ Время: " .. os.date())
+print(string.rep("=", 60))
 
--- Базовое сохранение всей игры
-print("🔄 Сохраняем всю игру...")
-saveinstance()
-print("✅ Игра сохранена в папку по умолчанию")
+local output = {}
 
--- Продвинутое сохранение с настройками
-print("🔄 Сохраняем с расширенными настройками...")
+-- Добавляем заголовок в файл
+table.insert(output, "-- СТРУКТУРА МОДУЛЕЙ TOWER DEFENSE")
+table.insert(output, "-- Игра ID: " .. game.PlaceId)
+table.insert(output, "-- Игрок: " .. LocalPlayer.Name)
+table.insert(output, "-- Время сканирования: " .. os.date())
+table.insert(output, "-- Путь: " .. Mods:GetFullName())
+table.insert(output, string.rep("=", 60))
+table.insert(output, "")
 
-saveinstance({
-    -- Основные настройки
-    SavePlayers = false,        -- Не сохранять других игроков
-    SaveNonCreatable = true,    -- Сохранить все объекты
-    DecompileScripts = true,    -- Декомпилировать скрипты
-    DecompileModules = true,    -- Декомпилировать модули
-    SaveBytecode = false,       -- Не сохранять байткод
-    
-    -- Путь сохранения  
-    mode = "optimized",         -- Оптимизированный режим
-    
-    -- Дополнительные опции
-    timeout = 10,               -- Таймаут в секундах
-    RemovePlayerCharacters = true, -- Убрать персонажей игроков
-    
-    -- Что сохранять
-    SaveWorkspace = true,       -- Сохранить workspace (карту)
-    SaveReplicatedStorage = true, -- Сохранить ReplicatedStorage
-    SaveReplicatedFirst = true, -- Сохранить ReplicatedFirst
-    SaveServerStorage = false,  -- ServerStorage недоступен клиенту
-    SaveServerScriptService = false, -- ServerScriptService недоступен
-    SaveStarterGui = true,      -- Сохранить StarterGui
-    SaveStarterPack = true,     -- Сохранить StarterPack
-    SaveStarterPlayer = true,   -- Сохранить StarterPlayer
-    SaveSoundService = true,    -- Сохранить SoundService
-    SaveLighting = true,        -- Сохранить Lighting
-    SaveMaterialService = true  -- Сохранить MaterialService
-})
+-- Сканируем основную папку Mods
+scanObject(Mods, 0, output)
 
-print("✅ Расширенное сохранение завершено!")
+-- Добавляем статистику
+table.insert(output, "")
+table.insert(output, string.rep("=", 60))
+table.insert(output, "📊 СТАТИСТИКА:")
 
--- Сохранение только ReplicatedStorage.Mods
-print("🎯 Сохраняем только папку Mods...")
+local stats = {
+    ModuleScript = 0,
+    LocalScript = 0,
+    Script = 0,
+    Folder = 0,
+    Total = 0
+}
+
+for _, obj in pairs(Mods:GetDescendants()) do
+    stats.Total = stats.Total + 1
+    if obj:IsA("ModuleScript") then
+        stats.ModuleScript = stats.ModuleScript + 1
+    elseif obj:IsA("LocalScript") then
+        stats.LocalScript = stats.LocalScript + 1
+    elseif obj:IsA("Script") then
+        stats.Script = stats.Script + 1
+    elseif obj:IsA("Folder") then
+        stats.Folder = stats.Folder + 1
+    end
+end
+
+table.insert(output, "📦 ModuleScript: " .. stats.ModuleScript)
+table.insert(output, "📜 LocalScript: " .. stats.LocalScript)
+table.insert(output, "📋 Script: " .. stats.Script)
+table.insert(output, "📁 Folder: " .. stats.Folder)
+table.insert(output, "📄 Всего объектов: " .. stats.Total)
+
+-- Добавляем список всех ModuleScript для быстрого поиска
+table.insert(output, "")
+table.insert(output, "🎯 СПИСОК ВСЕХ MODULESCRIPT:")
+local modulesList = {}
+for _, obj in pairs(Mods:GetDescendants()) do
+    if obj:IsA("ModuleScript") then
+        table.insert(modulesList, obj:GetFullName():gsub("game%.ReplicatedStorage%.Mods%.", ""))
+    end
+end
+table.sort(modulesList)
+for i, modulePath in ipairs(modulesList) do
+    table.insert(output, i .. ". " .. modulePath)
+end
+
+-- Сохраняем в файл
+local filename = "ModsStructure_" .. game.PlaceId .. "_" .. os.date("%H%M%S") .. ".txt"
+local content = table.concat(output, "\n")
 
 local success, error_msg = pcall(function()
-    saveinstance({
-        Instance = game.ReplicatedStorage.Mods,
-        DecompileScripts = true,
-        DecompileModules = true,
-        SaveNonCreatable = true,
-        mode = "optimized"
-    })
+    writefile(filename, content)
 end)
 
 if success then
-    print("✅ Папка Mods сохранена отдельно")
+    print("\n✅ Структура сохранена в файл: " .. filename)
+    print("📁 Размер файла: " .. #content .. " символов")
+    print("📊 Всего строк: " .. #output)
 else
-    print("❌ Ошибка сохранения Mods: " .. tostring(error_msg))
+    print("\n❌ Ошибка сохранения: " .. tostring(error_msg))
+    print("📋 Выводим содержимое в консоль:")
+    print(string.rep("=", 60))
+    for _, line in ipairs(output) do
+        print(line)
+    end
 end
 
--- Информация о сохранении
-print("\n📁 Файлы сохранены в:")
-print("- workspace/[GameName]/ - полная игра")
-print("- workspace/Mods/ - только модули")
-
-print("\n📋 Что найдешь в сохраненных файлах:")
-print("✅ Все декомпилированные .lua скрипты")
-print("✅ Структуру карты и объектов")
-print("✅ GUI элементы")
-print("✅ Настройки освещения и звуков")
-print("✅ Все модули из ReplicatedStorage")
-
-print("\n🎯 Ищи эти файлы:")
-print("- ReplicatedStorage/Mods/SquadMod.lua")
-print("- ReplicatedStorage/Mods/MenuMod.lua") 
-print("- StarterGui/[MainUI]/LocalScript.lua")
-print("- ReplicatedStorage/Remotes/ - все Remote события")
-
-print("\n💡 Если saveinstance не сработал:")
-print("1. Убедись что эмулятор поддерживает эту функцию")
-print("2. Попробуй другой эмулятор (Synapse X, Script-Ware)")
-print("3. Проверь есть ли папка workspace после выполнения")
-
--- Дополнительная информация
-print("\n📊 Информация об игре:")
-print("Game ID:", game.PlaceId)
-print("Game Name:", game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name or "Unknown")
-print("Creator:", game.CreatorType == Enum.CreatorType.User and "User" or "Group")
-print("Creator ID:", game.CreatorId)
+print("\n🎯 Что делать дальше:")
+print("1. Скинь мне содержимое файла " .. filename)
+print("2. Я скажу какие модули декомпилировать в первую очередь")
+print("3. Сделаем автофарм на основе приоритетных модулей")
+print("4. Profit! 💰")
