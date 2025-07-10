@@ -1,188 +1,128 @@
--- SaveInstance с прогресс-баром
--- Показывает сколько объектов обработано
+-- Поиск денег игрока в Tower Defense
+-- Проверяем все возможные места где могут храниться деньги
 
-print("💾 Запускаем SaveInstance с прогрессом...")
+print("💰 Ищем деньги игрока...")
 
--- Проверяем доступность функции
-if not saveinstance then
-    print("❌ saveinstance недоступен в этом эмуляторе")
-    return
-end
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-print("✅ saveinstance доступен!")
-
--- Функция для подсчета всех объектов
-local function countAllObjects()
-    local total = 0
-    local services = {
-        game.Workspace,
-        game.ReplicatedStorage,
-        game.ReplicatedFirst,
-        game.StarterGui,
-        game.StarterPack,
-        game.StarterPlayer,
-        game.SoundService,
-        game.Lighting,
-        game.MaterialService
-    }
-    
-    for _, service in pairs(services) do
-        total = total + #service:GetDescendants() + 1 -- +1 для самого сервиса
+-- 1. Проверяем атрибуты игрока
+print("\n🔍 Проверяем атрибуты игрока:")
+local attributes = {"Money", "Cash", "Coins", "Gold", "Currency", "Yen"}
+for _, attr in pairs(attributes) do
+    local value = LocalPlayer:GetAttribute(attr)
+    if value then
+        print("✅ " .. attr .. ": " .. tostring(value))
+    else
+        print("❌ " .. attr .. ": не найдено")
     end
-    
-    return total
 end
 
--- Подсчитываем общее количество объектов
-print("🔍 Подсчитываем объекты...")
-local totalObjects = countAllObjects()
-print("📊 Всего объектов для сохранения: " .. totalObjects)
+-- 2. Проверяем leaderstats
+print("\n🔍 Проверяем leaderstats:")
+local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
+if leaderstats then
+    print("✅ leaderstats найден!")
+    for _, stat in pairs(leaderstats:GetChildren()) do
+        print("📊 " .. stat.Name .. ": " .. tostring(stat.Value) .. " (" .. stat.ClassName .. ")")
+    end
+else
+    print("❌ leaderstats не найден")
+end
 
--- Переменные для прогресса
-local processedObjects = 0
-local lastProgressUpdate = 0
-
--- Функция обновления прогресса
-local function updateProgress()
-    processedObjects = processedObjects + 1
-    local progressPercent = math.floor((processedObjects / totalObjects) * 100)
+-- 3. Проверяем GUI элементы
+print("\n🔍 Проверяем GUI элементы:")
+local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+if PlayerGui then
+    local foundMoney = false
     
-    -- Обновляем каждые 5% или каждые 100 объектов
-    if progressPercent >= lastProgressUpdate + 5 or processedObjects % 100 == 0 then
-        lastProgressUpdate = progressPercent
-        local progressBar = ""
-        local filled = math.floor(progressPercent / 5) -- 20 символов = 100%
-        
-        for i = 1, 20 do
-            if i <= filled then
-                progressBar = progressBar .. "█"
-            else
-                progressBar = progressBar .. "░"
+    for _, gui in pairs(PlayerGui:GetDescendants()) do
+        if gui:IsA("TextLabel") and gui.Visible then
+            local text = gui.Text
+            -- Ищем числа в тексте
+            if text:match("%d+") then
+                local number = tonumber(text:match("%d+"))
+                if number and number > 0 then
+                    -- Проверяем контекст (название, родитель)
+                    local context = gui.Name .. " | " .. (gui.Parent and gui.Parent.Name or "")
+                    if context:lower():find("money") or context:lower():find("cash") or 
+                       context:lower():find("coin") or context:lower():find("currency") or
+                       context:lower():find("yen") or context:lower():find("gold") then
+                        print("💰 " .. context .. ": " .. text)
+                        foundMoney = true
+                    elseif number >= 100 and number <= 999999 then
+                        -- Возможные деньги (в разумном диапазоне)
+                        print("🤔 Возможно деньги - " .. context .. ": " .. text)
+                    end
+                end
             end
         end
-        
-        print(string.format("🔄 [%s] %d%% (%d/%d)", 
-            progressBar, progressPercent, processedObjects, totalObjects))
     end
+    
+    if not foundMoney then
+        print("❌ Деньги в GUI не найдены")
+    end
+else
+    print("❌ PlayerGui не найден")
 end
 
--- Хук для отслеживания прогресса (если доступен)
-local function hookSaveInstance()
-    -- Пытаемся подключиться к внутренним событиям saveinstance
-    local success = pcall(function()
-        if getgenv and getgenv().saveinstance_progress then
-            getgenv().saveinstance_progress = updateProgress
+-- 4. Проверяем все атрибуты игрока (расширенный поиск)
+print("\n🔍 Все атрибуты игрока:")
+local function getAllAttributes(obj)
+    local attrs = {}
+    for name, value in pairs(obj:GetAttributes()) do
+        attrs[name] = value
+    end
+    return attrs
+end
+
+local allAttrs = getAllAttributes(LocalPlayer)
+if next(allAttrs) then
+    for name, value in pairs(allAttrs) do
+        if type(value) == "number" and value > 0 then
+            print("🔢 " .. name .. ": " .. tostring(value))
+        end
+    end
+else
+    print("❌ Атрибуты не найдены")
+end
+
+-- 5. Функция для постоянного мониторинга
+local function monitorMoney()
+    print("\n📡 Запускаем мониторинг денег каждые 2 секунды...")
+    print("(Нажми что-то в игре чтобы увидеть изменения)")
+    
+    spawn(function()
+        local lastMoney = {}
+        
+        while true do
+            wait(2)
+            
+            -- Проверяем атрибуты
+            for _, attr in pairs(attributes) do
+                local value = LocalPlayer:GetAttribute(attr)
+                if value and value ~= lastMoney[attr] then
+                    print("💰 " .. attr .. " изменилось: " .. (lastMoney[attr] or 0) .. " → " .. value)
+                    lastMoney[attr] = value
+                end
+            end
+            
+            -- Проверяем leaderstats
+            if leaderstats then
+                for _, stat in pairs(leaderstats:GetChildren()) do
+                    local value = stat.Value
+                    local key = "leaderstats_" .. stat.Name
+                    if value ~= lastMoney[key] then
+                        print("📊 leaderstats." .. stat.Name .. " изменилось: " .. (lastMoney[key] or 0) .. " → " .. value)
+                        lastMoney[key] = value
+                    end
+                end
+            end
         end
     end)
-    
-    if not success then
-        print("⚠️ Автоматический прогресс недоступен, используем таймер")
-        -- Запускаем примерный прогресс по таймеру
-        spawn(function()
-            local startTime = tick()
-            local estimatedTime = totalObjects / 50 -- Примерно 50 объектов в секунду
-            
-            while processedObjects < totalObjects do
-                wait(0.5)
-                local elapsed = tick() - startTime
-                local estimatedProgress = math.min(elapsed / estimatedTime, 0.95) -- Максимум 95%
-                processedObjects = math.floor(estimatedProgress * totalObjects)
-                updateProgress()
-            end
-        end)
-    end
 end
 
--- Запускаем хук прогресса
-hookSaveInstance()
+-- Запускаем мониторинг
+monitorMoney()
 
-print("🚀 Начинаем сохранение игры...")
-print("⏱️ Примерное время: " .. math.ceil(totalObjects / 50) .. " секунд")
-
--- Сохраняем игру с прогрессом
-local startTime = tick()
-
-saveinstance({
-    SavePlayers = false,
-    SaveNonCreatable = true,
-    DecompileScripts = true,
-    DecompileModules = true,
-    SaveBytecode = false,
-    mode = "optimized",
-    timeout = 30,
-    RemovePlayerCharacters = true,
-    SaveWorkspace = true,
-    SaveReplicatedStorage = true,
-    SaveReplicatedFirst = true,
-    SaveServerStorage = false,
-    SaveServerScriptService = false,
-    SaveStarterGui = true,
-    SaveStarterPack = true,
-    SaveStarterPlayer = true,
-    SaveSoundService = true,
-    SaveLighting = true,
-    SaveMaterialService = true
-})
-
--- Завершаем прогресс
-processedObjects = totalObjects
-updateProgress()
-
-local endTime = tick()
-local totalTime = endTime - startTime
-
-print("✅ Сохранение завершено!")
-print(string.format("⏱️ Время выполнения: %.1f секунд", totalTime))
-print(string.format("⚡ Скорость: %.1f объектов/сек", totalObjects / totalTime))
-
--- Дополнительное сохранение только Mods с прогрессом
-print("\n🎯 Сохраняем отдельно папку Mods...")
-
-local modsObjects = #game.ReplicatedStorage.Mods:GetDescendants()
-local modsProcessed = 0
-
-print("📦 Объектов в Mods: " .. modsObjects)
-
--- Сохраняем Mods
-local success, error_msg = pcall(function()
-    saveinstance({
-        Instance = game.ReplicatedStorage.Mods,
-        DecompileScripts = true,
-        DecompileModules = true,
-        SaveNonCreatable = true,
-        mode = "optimized"
-    })
-end)
-
-if success then
-    print("✅ Папка Mods сохранена отдельно")
-else
-    print("❌ Ошибка сохранения Mods: " .. tostring(error_msg))
-end
-
--- Итоговая информация
-print("\n📁 Результаты сохранения:")
-print("- workspace/[GameName]/ - полная игра")
-print("- workspace/Mods/ - только модули")
-print("\n🎯 Ищи декомпилированные файлы:")
-print("- ReplicatedStorage/Mods/SquadMod.lua")
-print("- ReplicatedStorage/Mods/MenuMod.lua")
-print("- StarterGui/MainUI/LocalScript.lua")
-
-print("\n📊 Статистика:")
-print("Game ID:", game.PlaceId)
-print("Объектов обработано:", totalObjects)
-print("Время выполнения:", string.format("%.1f сек", totalTime))
-
--- Проверяем что файлы создались
-spawn(function()
-    wait(2)
-    if isfile and isfolder then
-        local gameFolder = "workspace/" .. tostring(game.PlaceId)
-        if isfolder(gameFolder) then
-            print("✅ Папка игры создана: " .. gameFolder)
-        else
-            print("⚠️ Папка игры не найдена, проверь workspace/")
-        end
-    end
-end)
+print("\n✅ Поиск денег завершен! Смотри результаты выше.")
