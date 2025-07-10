@@ -51,12 +51,116 @@ local function getGameUI()
     return success and result or nil
 end
 
--- Переменные для предотвращения спама
-local lastActions = {
-    skip = 0,
-    start = 0,
-    replay = 0
+-- Переменные для фарма
+local farmUnits = {
+    farm1 = nil, -- Ссылка на первый фарм юнит
+    farm2 = nil  -- Ссылка на второй фарм юнит
 }
+
+local upgradePrices = {1100, 1500, 1500, 3000, 5000}
+
+-- Функции для спавна и улучшения
+local function spawnFarmUnit(position, farmSlot)
+    local money = getMoney()
+    if money < 500 then
+        print("❌ Недостаточно денег для спавна (нужно 500, есть " .. money .. ")")
+        return false
+    end
+    
+    local success = pcall(function()
+        local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+        local setEvent = remotes and remotes:FindFirstChild("SetEvent")
+        
+        if not setEvent then
+            warn("❌ SetEvent remote не найден")
+            return
+        end
+        
+        local args = {
+            "GameStuff",
+            {
+                "Summon",
+                "Teiuchi",
+                position
+            }
+        }
+        setEvent:FireServer(unpack(args))
+        
+        -- Ждем появления юнита и сохраняем ссылку
+        wait(1)
+        local unitFolder = workspace:FindFirstChild("UnitFolder")
+        if unitFolder then
+            for _, unit in pairs(unitFolder:GetChildren()) do
+                if unit.Name == "Teiuchi" and not farmUnits.farm1 and not farmUnits.farm2 then
+                    farmUnits[farmSlot] = unit
+                    break
+                elseif unit.Name == "Teiuchi" and farmSlot == "farm2" and not farmUnits.farm2 then
+                    farmUnits[farmSlot] = unit
+                    break
+                end
+            end
+        end
+    end)
+    
+    if success then
+        print("🏗️ Фарм юнит " .. farmSlot .. " заспавлен")
+        return true
+    else
+        warn("❌ Ошибка спавна фарм юнита")
+        return false
+    end
+end
+
+local function upgradeFarmUnit(farmSlot)
+    local unit = farmUnits[farmSlot]
+    if not unit or not unit.Parent then
+        print("❌ Фарм юнит " .. farmSlot .. " не найден")
+        return false
+    end
+    
+    -- Получаем текущий уровень (пока заглушка)
+    local currentLevel = unit:GetAttribute("Level") or 0
+    if currentLevel >= 5 then
+        print("❌ Фарм юнит " .. farmSlot .. " уже максимального уровня")
+        return false
+    end
+    
+    local requiredMoney = upgradePrices[currentLevel + 1]
+    local money = getMoney()
+    if money < requiredMoney then
+        print("❌ Недостаточно денег для улучшения " .. farmSlot .. " (нужно " .. requiredMoney .. ", есть " .. money .. ")")
+        return false
+    end
+    
+    local success = pcall(function()
+        local remotes = game.ReplicatedStorage:FindFirstChild("Remotes")
+        local getFunction = remotes and remotes:FindFirstChild("GetFunction")
+        
+        if not getFunction then
+            warn("❌ GetFunction remote не найден")
+            return
+        end
+        
+        local args = {
+            {
+                Type = "GameStuff"
+            },
+            {
+                "Upgrade",
+                unit
+            }
+        }
+        getFunction:InvokeServer(unpack(args))
+    end)
+    
+    if success then
+        print("⬆️ Фарм юнит " .. farmSlot .. " улучшен")
+        return true
+    else
+        warn("❌ Ошибка улучшения фарм юнита")
+        return false
+    end
+end
 
 -- Функции автоматизации
 local function sendSkip()
@@ -282,6 +386,65 @@ local function createGUI()
     moneyCorner.CornerRadius = UDim.new(0, 6)
     moneyCorner.Parent = moneyButton
     
+    -- Функция создания кнопки фарма
+    local function createFarmButton(name, text, color, layoutOrder)
+        local button = Instance.new("TextButton")
+        button.Name = name
+        button.Size = UDim2.new(0.48, 0, 0, 25)
+        button.BackgroundColor3 = color
+        button.BorderSizePixel = 0
+        button.Text = text
+        button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        button.TextScaled = true
+        button.Font = Enum.Font.SourceSans
+        button.LayoutOrder = layoutOrder
+        button.Parent = contentFrame
+        
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 4)
+        corner.Parent = button
+        
+        return button
+    end
+    
+    -- Контейнер для кнопок спавна (2 в ряд)
+    local spawnFrame = Instance.new("Frame")
+    spawnFrame.Name = "SpawnFrame"
+    spawnFrame.Size = UDim2.new(1, 0, 0, 25)
+    spawnFrame.BackgroundTransparency = 1
+    spawnFrame.LayoutOrder = 5
+    spawnFrame.Parent = contentFrame
+    
+    local spawnLayout = Instance.new("UIListLayout")
+    spawnLayout.FillDirection = Enum.FillDirection.Horizontal
+    spawnLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween
+    spawnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    spawnLayout.Parent = spawnFrame
+    
+    local spawnFarm1 = createFarmButton("SpawnFarm1", "Spawn F1", Color3.fromRGB(85, 255, 85), 1)
+    spawnFarm1.Parent = spawnFrame
+    local spawnFarm2 = createFarmButton("SpawnFarm2", "Spawn F2", Color3.fromRGB(85, 255, 85), 2)
+    spawnFarm2.Parent = spawnFrame
+    
+    -- Контейнер для кнопок улучшения (2 в ряд)
+    local upgradeFrame = Instance.new("Frame")
+    upgradeFrame.Name = "UpgradeFrame"
+    upgradeFrame.Size = UDim2.new(1, 0, 0, 25)
+    upgradeFrame.BackgroundTransparency = 1
+    upgradeFrame.LayoutOrder = 6
+    upgradeFrame.Parent = contentFrame
+    
+    local upgradeLayout = Instance.new("UIListLayout")
+    upgradeLayout.FillDirection = Enum.FillDirection.Horizontal
+    upgradeLayout.HorizontalAlignment = Enum.HorizontalAlignment.SpaceBetween
+    upgradeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    upgradeLayout.Parent = upgradeFrame
+    
+    local upgradeFarm1 = createFarmButton("UpgradeFarm1", "UF1 - 0/5", Color3.fromRGB(255, 170, 85), 1)
+    upgradeFarm1.Parent = upgradeFrame
+    local upgradeFarm2 = createFarmButton("UpgradeFarm2", "UF2 - 0/5", Color3.fromRGB(255, 170, 85), 2)
+    upgradeFarm2.Parent = upgradeFrame
+    
     -- Функция переключения Toggle
     local function setupToggle(toggleButton, settingName)
         toggleButton.Activated:Connect(function()
@@ -308,6 +471,25 @@ local function createGUI()
     moneyButton.Activated:Connect(function()
         local money = getMoney()
         print("💰 Текущие деньги: " .. money)
+    end)
+    
+    -- Обработчики кнопок фарма
+    spawnFarm1.Activated:Connect(function()
+        local position = CFrame.new(-53.786128997802734, 55.58282470703125, 1.467529296875, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+        spawnFarmUnit(position, "farm1")
+    end)
+    
+    spawnFarm2.Activated:Connect(function()
+        local position = CFrame.new(-40.75933074951172, 55.58282470703125, 2.94580078125, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+        spawnFarmUnit(position, "farm2")
+    end)
+    
+    upgradeFarm1.Activated:Connect(function()
+        upgradeFarmUnit("farm1")
+    end)
+    
+    upgradeFarm2.Activated:Connect(function()
+        upgradeFarmUnit("farm2")
     end)
     
     -- Закрытие GUI
@@ -374,6 +556,7 @@ local function startAutomation()
     local lastSkipVisible = false
     local lastStartVisible = false
     local lastResultVisible = false
+    local replaySent = false -- Флаг для предотвращения повторной отправки
     
     local connection = RunService.Heartbeat:Connect(function()
         if not gui then return end -- Останавливаем если GUI закрыт
@@ -405,12 +588,14 @@ local function startAutomation()
             
             if isVisible and not lastResultVisible then
                 replayStartTime = tick()
+                replaySent = false -- Сбрасываем флаг при новом появлении
                 print("⏱️ Результат показан, жду 5 секунд для Replay...")
-            elseif isVisible and replayStartTime > 0 and tick() - replayStartTime >= 5 then
+            elseif isVisible and not replaySent and replayStartTime > 0 and tick() - replayStartTime >= 5 then
                 sendReplay()
-                replayStartTime = 0
+                replaySent = true -- Помечаем что отправили
             elseif not isVisible then
                 replayStartTime = 0
+                replaySent = false -- Сбрасываем при скрытии
             end
             
             lastResultVisible = isVisible
