@@ -1,126 +1,82 @@
--- SquadMod Decompiler Script
--- Декомпилирует и сохраняет SquadMod модуль
+-- Декомпилятор подмодулей SquadMod
+-- Попробуем декомпилировать каждый подмодуль отдельно
 
-print("🎯 Начинаем декомпиляцию SquadMod...")
+print("🎯 Декомпилируем подмодули SquadMod...")
 
--- Находим модуль SquadMod
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Mods = ReplicatedStorage:WaitForChild("Mods")
-local SquadMod = Mods:WaitForChild("SquadMod")
+local SquadMod = ReplicatedStorage.Mods.SquadMod
 
-print("📦 Найден модуль: " .. SquadMod:GetFullName())
+-- Приоритетные модули для автофарма
+local priorityModules = {
+    "UnitInfo",    -- Информация о юнитах
+    "LevelMod",    -- Уровни и улучшения  
+    "SellMod",     -- Продажа юнитов
+    "SlotsMod",    -- Слоты для юнитов
+    "ViewMod"      -- Отображение
+}
 
--- Функция декомпиляции
-local function decompileSquadMod()
+-- Функция декомпиляции одного модуля
+local function decompileModule(module)
     local success, result = pcall(function()
-        -- Пробуем разные методы декомпиляции
         if decompile then
-            print("🔧 Используем decompile()")
-            return decompile(SquadMod)
+            return decompile(module)
         elseif getscriptclosure then
-            print("🔧 Используем getscriptclosure()")
-            local closure = getscriptclosure(SquadMod)
-            if closure then
-                if decompileFunction then
-                    return decompileFunction(closure)
-                else
-                    return "-- Closure получен, но decompileFunction недоступен\n-- " .. tostring(closure)
-                end
-            else
-                return "-- Не удалось получить closure"
+            local closure = getscriptclosure(module)
+            if closure and decompileFunction then
+                return decompileFunction(closure)
             end
-        else
-            error("Декомпилятор недоступен")
         end
+        error("Декомпилятор недоступен")
     end)
     
-    if success and result then
-        print("✅ Декомпиляция успешна! Размер: " .. #result .. " символов")
+    if success and result and #result > 50 then
         return result
     else
-        print("❌ Ошибка декомпиляции: " .. tostring(result))
-        
-        -- Создаем базовую информацию о модуле
-        local info = {
-            "-- SQUADMOD DECOMPILATION FAILED",
-            "-- Error: " .. tostring(result),
-            "-- Module: " .. SquadMod:GetFullName(),
-            "-- Type: " .. SquadMod.ClassName,
-            "-- Parent: " .. SquadMod.Parent.Name,
-            "-- Time: " .. os.date(),
-            "",
-            "-- Module Children:"
-        }
-        
-        for _, child in pairs(SquadMod:GetChildren()) do
-            table.insert(info, "-- " .. child.Name .. " (" .. child.ClassName .. ")")
-        end
-        
-        table.insert(info, "")
-        table.insert(info, "-- [ORIGINAL SOURCE CODE NOT AVAILABLE]")
-        table.insert(info, "-- Попробуй другой декомпилятор или метод")
-        
-        return table.concat(info, "\n")
+        return "-- FAILED TO DECOMPILE: " .. module.Name .. 
+               "\n-- Error: " .. tostring(result) ..
+               "\n-- [SOURCE CODE NOT AVAILABLE]"
     end
 end
 
--- Декомпилируем SquadMod
-local decompiled = decompileSquadMod()
-
--- Добавляем заголовок с информацией
-local header = [[-- SquadMod Decompiled
+-- Декомпилируем приоритетные модули
+for _, moduleName in ipairs(priorityModules) do
+    local module = SquadMod:FindFirstChild(moduleName)
+    if module then
+        print("🔧 Декомпилируем: " .. moduleName)
+        
+        local decompiled = decompileModule(module)
+        
+        local header = [[-- ]] .. moduleName .. [[ Decompiled
+-- From: SquadMod.]] .. moduleName .. [[
 -- Game: ]] .. game.PlaceId .. [[
--- Player: ]] .. game.Players.LocalPlayer.Name .. [[
 -- Time: ]] .. os.date() .. [[
--- Module Path: ]] .. SquadMod:GetFullName() .. [[
 
 ]]
-
-local fullContent = header .. decompiled
-
--- Сохраняем файл (без лишней папки workspace)
-local filename = "SquadMod_" .. os.date("%H%M%S") .. ".lua"
-local success, error_msg = pcall(function()
-    writefile(filename, fullContent)
-end)
-
-if success then
-    print("✅ SquadMod сохранен как: " .. filename)
-    print("📊 Размер файла: " .. #fullContent .. " символов")
-    
-    -- Проверяем что файл создался
-    if readfile then
-        local check = readfile(filename)
-        if check and #check > 0 then
-            print("✅ Файл успешно читается")
-            print("📝 Первые 200 символов:")
-            print(string.sub(check, 1, 200) .. "...")
+        
+        local content = header .. decompiled
+        local filename = "SquadMod_" .. moduleName .. ".lua"
+        
+        local success, error_msg = pcall(function()
+            writefile(filename, content)
+        end)
+        
+        if success then
+            print("✅ " .. moduleName .. " сохранен")
         else
-            print("⚠️ Файл пустой или не читается")
+            print("❌ Ошибка " .. moduleName .. ": " .. tostring(error_msg))
         end
-    end
-else
-    print("❌ Ошибка сохранения: " .. tostring(error_msg))
-    print("📋 Выводим содержимое в консоль:")
-    print(string.rep("=", 80))
-    print(fullContent)
-    print(string.rep("=", 80))
-end
-
-print("🎯 Декомпиляция SquadMod завершена!")
-
--- Дополнительная информация
-print("\n📊 Информация о модуле:")
-print("Имя:", SquadMod.Name)
-print("Тип:", SquadMod.ClassName) 
-print("Родитель:", SquadMod.Parent.Name)
-print("Полный путь:", SquadMod:GetFullName())
-print("Дочерние объекты:", #SquadMod:GetChildren())
-
--- Показываем структуру модуля
-if #SquadMod:GetChildren() > 0 then
-    print("\n📁 Содержимое модуля:")
-    for i, child in pairs(SquadMod:GetChildren()) do
-        print("  " .. i .. ". " .. child.Name .. " (" .. child.ClassName .. ")")
+    else
+        print("❌ Модуль не найден: " .. moduleName)
     end
 end
+
+-- Показываем все доступные модули
+print("\n📋 Все подмодули SquadMod:")
+for i, child in pairs(SquadMod:GetChildren()) do
+    print("  " .. i .. ". " .. child.Name .. " (" .. child.ClassName .. ")")
+end
+
+print("\n💡 Если декомпиляция не работает, попробуй:")
+print("1. Другой эмулятор с лучшим декомпилятором")
+print("2. Анализ через require() и вывод функций")
+print("3. Отслеживание RemoteEvents вместо декомпиляции")
