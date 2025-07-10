@@ -1,128 +1,338 @@
--- Поиск денег игрока в Tower Defense
--- Проверяем все возможные места где могут храниться деньги
-
-print("💰 Ищем деньги игрока...")
+-- Tower Defense Auto GUI
+-- Темный интерфейс с Auto Skip, Auto Start, Auto Replay
 
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- 1. Проверяем атрибуты игрока
-print("\n🔍 Проверяем атрибуты игрока:")
-local attributes = {"Money", "Cash", "Coins", "Gold", "Currency", "Yen"}
-for _, attr in pairs(attributes) do
-    local value = LocalPlayer:GetAttribute(attr)
-    if value then
-        print("✅ " .. attr .. ": " .. tostring(value))
-    else
-        print("❌ " .. attr .. ": не найдено")
-    end
+-- Настройки
+local settings = {
+    autoSkip = false,
+    autoStart = false,
+    autoReplay = false
+}
+
+local connections = {}
+local gui = nil
+
+-- Функция для получения денег
+local function getMoney()
+    local success, money = pcall(function()
+        return LocalPlayer.Money.Value
+    end)
+    return success and money or 0
 end
 
--- 2. Проверяем leaderstats
-print("\n🔍 Проверяем leaderstats:")
-local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-if leaderstats then
-    print("✅ leaderstats найден!")
-    for _, stat in pairs(leaderstats:GetChildren()) do
-        print("📊 " .. stat.Name .. ": " .. tostring(stat.Value) .. " (" .. stat.ClassName .. ")")
-    end
-else
-    print("❌ leaderstats не найден")
-end
-
--- 3. Проверяем GUI элементы
-print("\n🔍 Проверяем GUI элементы:")
-local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
-if PlayerGui then
-    local foundMoney = false
-    
-    for _, gui in pairs(PlayerGui:GetDescendants()) do
-        if gui:IsA("TextLabel") and gui.Visible then
-            local text = gui.Text
-            -- Ищем числа в тексте
-            if text:match("%d+") then
-                local number = tonumber(text:match("%d+"))
-                if number and number > 0 then
-                    -- Проверяем контекст (название, родитель)
-                    local context = gui.Name .. " | " .. (gui.Parent and gui.Parent.Name or "")
-                    if context:lower():find("money") or context:lower():find("cash") or 
-                       context:lower():find("coin") or context:lower():find("currency") or
-                       context:lower():find("yen") or context:lower():find("gold") then
-                        print("💰 " .. context .. ": " .. text)
-                        foundMoney = true
-                    elseif number >= 100 and number <= 999999 then
-                        -- Возможные деньги (в разумном диапазоне)
-                        print("🤔 Возможно деньги - " .. context .. ": " .. text)
-                    end
-                end
-            end
-        end
-    end
-    
-    if not foundMoney then
-        print("❌ Деньги в GUI не найдены")
-    end
-else
-    print("❌ PlayerGui не найден")
-end
-
--- 4. Проверяем все атрибуты игрока (расширенный поиск)
-print("\n🔍 Все атрибуты игрока:")
-local function getAllAttributes(obj)
-    local attrs = {}
-    for name, value in pairs(obj:GetAttributes()) do
-        attrs[name] = value
-    end
-    return attrs
-end
-
-local allAttrs = getAllAttributes(LocalPlayer)
-if next(allAttrs) then
-    for name, value in pairs(allAttrs) do
-        if type(value) == "number" and value > 0 then
-            print("🔢 " .. name .. ": " .. tostring(value))
-        end
-    end
-else
-    print("❌ Атрибуты не найдены")
-end
-
--- 5. Функция для постоянного мониторинга
-local function monitorMoney()
-    print("\n📡 Запускаем мониторинг денег каждые 2 секунды...")
-    print("(Нажми что-то в игре чтобы увидеть изменения)")
-    
-    spawn(function()
-        local lastMoney = {}
+-- Функция для получения элементов UI игры
+local function getGameUI()
+    local success, result = pcall(function()
+        local gu = LocalPlayer.PlayerGui:FindFirstChild("GU")
+        local mainUI = LocalPlayer.PlayerGui:FindFirstChild("MainUI")
         
-        while true do
-            wait(2)
+        if not gu or not mainUI then return nil end
+        
+        return {
+            skipButton = gu.MenuFrame.TopFrame:FindFirstChild("Skip"),
+            startButton = gu.MenuFrame.TopFrame:FindFirstChild("Start"),
+            resultFrame = mainUI:FindFirstChild("ResultFrame")
+        }
+    end)
+    
+    return success and result or nil
+end
+
+-- Функции автоматизации
+local function sendSkip()
+    local success = pcall(function()
+        game.ReplicatedStorage.Remotes.SetEvent:FireServer("GameStuff", {"Skip"})
+    end)
+    if success then
+        print("⏩ Скип отправлен")
+    end
+end
+
+local function sendStart()
+    local success = pcall(function()
+        game.ReplicatedStorage.Remotes.SetEvent:FireServer("GameStuff", {"Start"})
+    end)
+    if success then
+        print("▶️ Старт отправлен")
+    end
+end
+
+local function sendReplay()
+    local success = pcall(function()
+        game.ReplicatedStorage.Remotes.SetEvent:FireServer("GameStuff", {"Replay"})
+    end)
+    if success then
+        print("🔄 Replay отправлен")
+    end
+end
+
+-- Создание GUI
+local function createGUI()
+    -- Основной ScreenGui
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "TowerDefenseAuto"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = PlayerGui
+    
+    -- Главный фрейм
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 250, 0, 200)
+    mainFrame.Position = UDim2.new(0, 50, 0, 50)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+    
+    -- Закругленные углы
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = mainFrame
+    
+    -- Заголовок
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 30)
+    titleBar.Position = UDim2.new(0, 0, 0, 0)
+    titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 8)
+    titleCorner.Parent = titleBar
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Size = UDim2.new(1, -60, 1, 0)
+    titleLabel.Position = UDim2.new(0, 10, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "🎯 Tower Defense Auto"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextScaled = true
+    titleLabel.Font = Enum.Font.SourceSansBold
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = titleBar
+    
+    -- Кнопка закрытия
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Size = UDim2.new(0, 25, 0, 25)
+    closeButton.Position = UDim2.new(1, -30, 0, 2.5)
+    closeButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+    closeButton.BorderSizePixel = 0
+    closeButton.Text = "✕"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.TextScaled = true
+    closeButton.Font = Enum.Font.SourceSansBold
+    closeButton.Parent = titleBar
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 4)
+    closeCorner.Parent = closeButton
+    
+    -- Контейнер для контента
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Name = "Content"
+    contentFrame.Size = UDim2.new(1, -20, 1, -40)
+    contentFrame.Position = UDim2.new(0, 10, 0, 35)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+    
+    -- Layout для элементов
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 5)
+    layout.Parent = contentFrame
+    
+    -- Функция создания Toggle
+    local function createToggle(name, text, layoutOrder)
+        local toggleFrame = Instance.new("Frame")
+        toggleFrame.Name = name
+        toggleFrame.Size = UDim2.new(1, 0, 0, 25)
+        toggleFrame.BackgroundTransparency = 1
+        toggleFrame.LayoutOrder = layoutOrder
+        toggleFrame.Parent = contentFrame
+        
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Name = "Toggle"
+        toggleButton.Size = UDim2.new(0, 40, 1, 0)
+        toggleButton.Position = UDim2.new(1, -40, 0, 0)
+        toggleButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+        toggleButton.BorderSizePixel = 0
+        toggleButton.Text = "OFF"
+        toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        toggleButton.TextScaled = true
+        toggleButton.Font = Enum.Font.SourceSansBold
+        toggleButton.Parent = toggleFrame
+        
+        local toggleCorner = Instance.new("UICorner")
+        toggleCorner.CornerRadius = UDim.new(0, 4)
+        toggleCorner.Parent = toggleButton
+        
+        local label = Instance.new("TextLabel")
+        label.Name = "Label"
+        label.Size = UDim2.new(1, -50, 1, 0)
+        label.Position = UDim2.new(0, 0, 0, 0)
+        label.BackgroundTransparency = 1
+        label.Text = text
+        label.TextColor3 = Color3.fromRGB(200, 200, 200)
+        label.TextScaled = true
+        label.Font = Enum.Font.SourceSans
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = toggleFrame
+        
+        return toggleButton
+    end
+    
+    -- Создание Toggle'ов
+    local autoSkipToggle = createToggle("AutoSkip", "Auto Skip", 1)
+    local autoStartToggle = createToggle("AutoStart", "Auto Start", 2)
+    local autoReplayToggle = createToggle("AutoReplay", "Auto Replay", 3)
+    
+    -- Кнопка Money
+    local moneyButton = Instance.new("TextButton")
+    moneyButton.Name = "MoneyButton"
+    moneyButton.Size = UDim2.new(1, 0, 0, 30)
+    moneyButton.BackgroundColor3 = Color3.fromRGB(85, 170, 255)
+    moneyButton.BorderSizePixel = 0
+    moneyButton.Text = "💰 Show Money"
+    moneyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    moneyButton.TextScaled = true
+    moneyButton.Font = Enum.Font.SourceSansBold
+    moneyButton.LayoutOrder = 4
+    moneyButton.Parent = contentFrame
+    
+    local moneyCorner = Instance.new("UICorner")
+    moneyCorner.CornerRadius = UDim.new(0, 6)
+    moneyCorner.Parent = moneyButton
+    
+    -- Функция переключения Toggle
+    local function setupToggle(toggleButton, settingName)
+        toggleButton.Activated:Connect(function()
+            settings[settingName] = not settings[settingName]
             
-            -- Проверяем атрибуты
-            for _, attr in pairs(attributes) do
-                local value = LocalPlayer:GetAttribute(attr)
-                if value and value ~= lastMoney[attr] then
-                    print("💰 " .. attr .. " изменилось: " .. (lastMoney[attr] or 0) .. " → " .. value)
-                    lastMoney[attr] = value
-                end
+            if settings[settingName] then
+                toggleButton.BackgroundColor3 = Color3.fromRGB(85, 255, 85)
+                toggleButton.Text = "ON"
+            else
+                toggleButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+                toggleButton.Text = "OFF"
             end
             
-            -- Проверяем leaderstats
-            if leaderstats then
-                for _, stat in pairs(leaderstats:GetChildren()) do
-                    local value = stat.Value
-                    local key = "leaderstats_" .. stat.Name
-                    if value ~= lastMoney[key] then
-                        print("📊 leaderstats." .. stat.Name .. " изменилось: " .. (lastMoney[key] or 0) .. " → " .. value)
-                        lastMoney[key] = value
-                    end
-                end
+            print("🔧 " .. settingName .. ": " .. (settings[settingName] and "включено" or "выключено"))
+        end)
+    end
+    
+    -- Настройка Toggle'ов
+    setupToggle(autoSkipToggle, "autoSkip")
+    setupToggle(autoStartToggle, "autoStart")
+    setupToggle(autoReplayToggle, "autoReplay")
+    
+    -- Обработка кнопки Money
+    moneyButton.Activated:Connect(function()
+        local money = getMoney()
+        print("💰 Текущие деньги: " .. money)
+    end)
+    
+    -- Закрытие GUI
+    closeButton.Activated:Connect(function()
+        print("🔴 Закрытие Tower Defense Auto...")
+        
+        -- Отключаем все Auto функции
+        settings.autoSkip = false
+        settings.autoStart = false
+        settings.autoReplay = false
+        
+        -- Отключаем все соединения
+        for _, connection in pairs(connections) do
+            if connection then
+                connection:Disconnect()
             end
+        end
+        
+        -- Удаляем GUI
+        screenGui:Destroy()
+        gui = nil
+        
+        print("✅ GUI закрыт, все функции отключены")
+    end)
+    
+    -- Перетаскивание GUI
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
         end
     end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    return screenGui
 end
 
--- Запускаем мониторинг
-monitorMoney()
+-- Основная логика автоматизации
+local function startAutomation()
+    local replayStartTime = 0
+    
+    local connection = RunService.Heartbeat:Connect(function()
+        local gameUI = getGameUI()
+        if not gameUI then return end
+        
+        -- Auto Skip
+        if settings.autoSkip and gameUI.skipButton and gameUI.skipButton.Visible then
+            sendSkip()
+        end
+        
+        -- Auto Start
+        if settings.autoStart and gameUI.startButton and gameUI.startButton.Visible then
+            sendStart()
+        end
+        
+        -- Auto Replay
+        if settings.autoReplay and gameUI.resultFrame and gameUI.resultFrame.Visible then
+            if replayStartTime == 0 then
+                replayStartTime = tick()
+                print("⏱️ Результат показан, жду 5 секунд для Replay...")
+            elseif tick() - replayStartTime >= 5 then
+                sendReplay()
+                replayStartTime = 0
+            end
+        else
+            replayStartTime = 0
+        end
+    end)
+    
+    table.insert(connections, connection)
+end
 
-print("\n✅ Поиск денег завершен! Смотри результаты выше.")
+-- Запуск
+print("🚀 Запуск Tower Defense Auto GUI...")
+gui = createGUI()
+startAutomation()
+print("✅ GUI создан! Используй Toggle'ы для автоматизации.")
