@@ -122,25 +122,15 @@ local function sendReplay()
             return
         end
         
-        -- Первый запрос - Replay
-        local args1 = {
+        -- Отправляем только первый запрос - Replay
+        local args = {
             {
                 Type = "Game",
                 Index = "Replay",
                 Mode = "Reward"
             }
         }
-        getFunction:InvokeServer(unpack(args1))
-        
-        -- Второй запрос - Map (через небольшую задержку)
-        wait(0.5)
-        local args2 = {
-            {
-                Type = "Map",
-                Mode = "Get"
-            }
-        }
-        getFunction:InvokeServer(unpack(args2))
+        getFunction:InvokeServer(unpack(args))
         
         lastActions.replay = currentTime
     end)
