@@ -1,30 +1,33 @@
--- Сканер только скриптов в Mods
--- Простой вывод только ModuleScript, LocalScript, Script
+-- Сканер ТОЛЬКО скриптов в Mods (без GUI мусора)
+-- Только ModuleScript, LocalScript, Script
 
-print("🔍 Сканируем только скрипты в Mods...")
+-- Очищаем консоль от мусора
+for i = 1, 50 do print() end
+
+print("🔍 СКАНИРУЕМ ТОЛЬКО СКРИПТЫ В MODS")
+print("🚫 Игнорируем GUI элементы")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Mods = ReplicatedStorage:WaitForChild("Mods")
 
--- Функция для рекурсивного поиска скриптов
+-- Функция для рекурсивного поиска ТОЛЬКО скриптов
 local function findScripts(obj, path, output)
     path = path or ""
     output = output or {}
     
     local currentPath = path == "" and obj.Name or path .. "." .. obj.Name
     
-    -- Если это скрипт - добавляем в список
+    -- ТОЛЬКО скрипты, никаких GUI элементов
     if obj:IsA("ModuleScript") or obj:IsA("LocalScript") or obj:IsA("Script") then
         local icon = "📦"
         if obj:IsA("LocalScript") then icon = "📜"
         elseif obj:IsA("Script") then icon = "📋" end
         
-        local line = icon .. " " .. currentPath .. " (" .. obj.ClassName .. ")"
+        local line = icon .. " " .. currentPath
         table.insert(output, line)
-        print(line)
     end
     
-    -- Ищем в дочерних объектах
+    -- Ищем в дочерних объектах (но выводим только скрипты)
     for _, child in pairs(obj:GetChildren()) do
         findScripts(child, currentPath, output)
     end
@@ -32,39 +35,31 @@ local function findScripts(obj, path, output)
     return output
 end
 
--- Собираем все скрипты
+-- Собираем все скрипты БЕЗ вывода в консоль
 local scriptsList = findScripts(Mods)
 
--- Выводим результат в консоль (так как файл не сохраняется)
-print("\n" .. string.rep("=", 50))
-print("📋 СПИСОК ВСЕХ СКРИПТОВ В MODS:")
-print(string.rep("=", 50))
+-- Теперь выводим ТОЛЬКО финальный результат
+print(string.rep("=", 40))
+print("📋 НАЙДЕННЫЕ СКРИПТЫ:")
+print(string.rep("=", 40))
 
 for i, script in ipairs(scriptsList) do
     print(i .. ". " .. script)
 end
 
-print("\n📊 Всего найдено скриптов: " .. #scriptsList)
-print("🎮 Игра ID: " .. game.PlaceId)
-print("⏰ Время: " .. os.date())
+print(string.rep("=", 40))
+print("📊 Всего: " .. #scriptsList .. " скриптов")
+print("🎮 Игра: " .. game.PlaceId)
+print(string.rep("=", 40))
 
--- Пытаемся сохранить простым способом
-local content = "-- СКРИПТЫ В MODS\n-- Игра: " .. game.PlaceId .. "\n-- Время: " .. os.date() .. "\n\n"
+-- Простое содержимое для файла
+local content = "СКРИПТЫ В MODS:\n\n"
 for i, script in ipairs(scriptsList) do
     content = content .. i .. ". " .. script .. "\n"
 end
+content = content .. "\nВсего: " .. #scriptsList .. " скриптов"
 
--- Без создания папок, просто файл
-local success = pcall(function()
-    writefile("scripts_list.txt", content)
-end)
-
-if success then
-    print("✅ Список сохранен в scripts_list.txt")
-else
-    print("❌ Файл не сохранился, но список выведен выше")
-    print("📝 Скопируй список из консоли и пришли мне")
-end
-
-print("\n🎯 Скопируй этот список и пришли мне!")
-print("Я скажу какие модули декомпилировать в первую очередь")
+-- Сохраняем
+writefile("mods_scripts.txt", content)
+print("✅ Сохранено в mods_scripts.txt")
+print("📝 Обнови GitHub и пришли мне этот список!")
