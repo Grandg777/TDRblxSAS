@@ -58,6 +58,7 @@ function Library:CreateWindow(config)
     local windowName = config.Name or "Window"
     local mainColor = config.Color or Color3.fromRGB(45, 45, 55)
     local accentColor = config.Accent or Color3.fromRGB(0, 162, 255)
+    local toggleKey = config.ToggleKey or Enum.KeyCode.RightShift
     
     -- Main GUI
     local ScreenGui = Create("ScreenGui", {
@@ -121,6 +122,15 @@ function Library:CreateWindow(config)
     
     CloseButton.MouseButton1Click:Connect(function()
         ScreenGui:Destroy()
+    end)
+    
+    -- Toggle visibility with configurable key (default Right Shift)
+    local isVisible = true
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == toggleKey then
+            isVisible = not isVisible
+            MainFrame.Visible = isVisible
+        end
     end)
     
     -- Tab Container
@@ -1117,3 +1127,4 @@ function Library:CreateWindow(config)
 end
 
 return Library
+                        DropdownFrame.Size = UDim2.new(1, 0,
