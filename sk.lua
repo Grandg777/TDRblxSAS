@@ -8,7 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- Загрузка библиотеки
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Grandg777/TDRblxSAS/refs/heads/main/inf.lua"))() -- Замените на URL вашей библиотеки
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Grandg777/TDRblxSAS/refs/heads/main/inf.lua"))()
 
 -- Настройки
 local settings = {
@@ -79,32 +79,42 @@ end
 
 -- Функция для обновления текста кнопок улучшения
 local function updateUpgradeButtons()
-    if uiElements.upgrade1Btn then
-        uiElements.upgrade1Btn:SetText("UF1 - " .. farmLevels.farm1 .. "/5")
+    if uiElements.upgrade1Btn and uiElements.upgrade1Btn.SetText then
+        pcall(function()
+            uiElements.upgrade1Btn.SetText("UF1 - " .. farmLevels.farm1 .. "/5")
+        end)
     end
-    if uiElements.upgrade2Btn then
-        uiElements.upgrade2Btn:SetText("UF2 - " .. farmLevels.farm2 .. "/5")
+    if uiElements.upgrade2Btn and uiElements.upgrade2Btn.SetText then
+        pcall(function()
+            uiElements.upgrade2Btn.SetText("UF2 - " .. farmLevels.farm2 .. "/5")
+        end)
     end
 end
 
 -- Функция для спавна фарм юнита
 local function spawnFarmUnit(position, farmSlot)
+    -- Проверка денег перед отправкой
     local money = getMoney()
     if money < 500 then
         print("❌ Недостаточно денег для спавна (нужно 500, есть " .. money .. ")")
         return false
     end
     
-    -- Проверяем существование RemoteEvent
+    -- Проверяем существование RemoteEvent перед отправкой
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if not remotes then
+        warn("❌ Remotes не найден")
+        return false
+    end
+    
+    local setEvent = remotes:FindFirstChild("SetEvent")
+    if not setEvent then
+        warn("❌ SetEvent remote не найден")
+        return false
+    end
+    
+    -- Отправляем запрос только если все проверки пройдены
     local success = pcall(function()
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
-        local setEvent = remotes and remotes:FindFirstChild("SetEvent")
-        
-        if not setEvent then
-            warn("❌ SetEvent remote не найден")
-            return false
-        end
-        
         local args = {
             "GameStuff",
             {
@@ -120,7 +130,7 @@ local function spawnFarmUnit(position, farmSlot)
         print("🏗️ Отправлен запрос на спавн фарм юнита " .. farmSlot)
         
         -- Ждем появления юнита и сохраняем ссылку
-        task.wait(1)
+        task.wait(1.5)
         
         local unitFolder = workspace:FindFirstChild("UnitFolder")
         if unitFolder then
@@ -155,6 +165,8 @@ local function spawnFarmUnit(position, farmSlot)
                 end
             end
         end
+    else
+        warn("❌ Ошибка при отправке запроса на спавн")
     end
     
     return false
@@ -184,17 +196,21 @@ local function upgradeFarmUnit(farmSlot)
         return false
     end
     
-    -- Проверяем существование RemoteFunction
+    -- Проверяем существование RemoteFunction перед отправкой
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if not remotes then
+        warn("❌ Remotes не найден")
+        return false
+    end
+    
+    local getFunction = remotes:FindFirstChild("GetFunction")
+    if not getFunction then
+        warn("❌ GetFunction remote не найден")
+        return false
+    end
+    
+    -- Отправляем запрос на улучшение только если все проверки пройдены
     local success = pcall(function()
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
-        local getFunction = remotes and remotes:FindFirstChild("GetFunction")
-        
-        if not getFunction then
-            warn("❌ GetFunction remote не найден")
-            return false
-        end
-        
-        -- Отправляем конкретную ссылку на юнита
         local args = {
             {
                 Type = "GameStuff"
@@ -208,12 +224,23 @@ local function upgradeFarmUnit(farmSlot)
     end)
     
     if success then
-        farmLevels[farmSlot] = currentLevel + 1
-        print("⬆️ Фарм юнит " .. farmSlot .. " улучшен до уровня " .. farmLevels[farmSlot])
-        updateUpgradeButtons()
-        return true
+        -- Ждем немного чтобы сервер обработал запрос
+        task.wait(0.5)
+        
+        -- Проверяем деньги после улучшения чтобы понять успешно ли
+        local newMoney = getMoney()
+        if newMoney < money then
+            -- Деньги потратились, значит улучшение прошло успешно
+            farmLevels[farmSlot] = currentLevel + 1
+            print("⬆️ Фарм юнит " .. farmSlot .. " улучшен до уровня " .. farmLevels[farmSlot])
+            updateUpgradeButtons()
+            return true
+        else
+            print("❌ Улучшение не произошло (деньги не потратились)")
+            return false
+        end
     else
-        warn("❌ Ошибка улучшения фарм юнита " .. farmSlot)
+        warn("❌ Ошибка при отправке запроса на улучшение фарм юнита " .. farmSlot)
     end
     
     return false
@@ -365,21 +392,39 @@ local function createGUI()
     
     -- Кнопки улучшения
     local upgradeRow = Window:CreateButtonRow()
-    uiElements.upgrade1Btn = upgradeRow:AddButton({
+    
+    -- Создаем кнопки и сохраняем только сами кнопки, а не результат метода
+    local upgrade1BtnData = upgradeRow:AddButton({
         Text = "UF1 - 0/5",
         Color = Color3.fromRGB(255, 170, 85),
         Callback = function()
-            upgradeFarmUnit("farm1")
+            -- Добавляем задержку чтобы не спамить
+            if not uiElements.upgrade1Cooldown then
+                uiElements.upgrade1Cooldown = true
+                upgradeFarmUnit("farm1")
+                task.wait(1)
+                uiElements.upgrade1Cooldown = false
+            end
         end
     })
     
-    uiElements.upgrade2Btn = upgradeRow:AddButton({
+    local upgrade2BtnData = upgradeRow:AddButton({
         Text = "UF2 - 0/5",
         Color = Color3.fromRGB(255, 170, 85),
         Callback = function()
-            upgradeFarmUnit("farm2")
+            -- Добавляем задержку чтобы не спамить
+            if not uiElements.upgrade2Cooldown then
+                uiElements.upgrade2Cooldown = true
+                upgradeFarmUnit("farm2")
+                task.wait(1)
+                uiElements.upgrade2Cooldown = false
+            end
         end
     })
+    
+    -- Сохраняем ссылки на методы SetText
+    uiElements.upgrade1Btn = upgrade1BtnData
+    uiElements.upgrade2Btn = upgrade2BtnData
     
     -- Периодическая проверка юнитов
     task.spawn(function()
