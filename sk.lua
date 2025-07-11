@@ -81,12 +81,12 @@ end
 local function updateUpgradeButtons()
     if uiElements.upgrade1Btn and uiElements.upgrade1Btn.SetText then
         pcall(function()
-            uiElements.upgrade1Btn.SetText("UF1 - " .. farmLevels.farm1 .. "/5")
+            uiElements.upgrade1Btn:SetText("UF1 - " .. farmLevels.farm1 .. "/5")
         end)
     end
     if uiElements.upgrade2Btn and uiElements.upgrade2Btn.SetText then
         pcall(function()
-            uiElements.upgrade2Btn.SetText("UF2 - " .. farmLevels.farm2 .. "/5")
+            uiElements.upgrade2Btn:SetText("UF2 - " .. farmLevels.farm2 .. "/5")
         end)
     end
 end
