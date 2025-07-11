@@ -1,4 +1,34 @@
--- Tower Defense Auto GUI с простой библиотекой
+-- Функция для получения уровня юнита
+local function getUnitLevel(unit)
+    if not unit or not unit.Parent then return 0 end
+    
+    -- Пробуем разные способы получить уровень
+    -- 1. Атрибут Level
+    local level = unit:GetAttribute("Level")
+    if level then return level end
+    
+    -- 2. Ищем в HumanoidRootPart
+    local hrp = unit:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        level = hrp:GetAttribute("Level")
+        if level then return level end
+    end
+    
+    -- 3. Ищем ValueObject
+    local levelValue = unit:FindFirstChild("Level")
+    if levelValue and levelValue:IsA("IntValue") then
+        return levelValue.Value
+    end
+    
+    -- 4. Возвращаем сохраненный уровень
+    for slot, savedUnit in pairs(farmUnits) do
+        if savedUnit == unit then
+            return farmLevels[slot]
+        end
+    end
+    
+    return 0
+end-- Tower Defense Auto GUI с простой библиотекой
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -431,9 +461,18 @@ local function createGUI()
         while Window.Enabled do
             task.wait(1)
             
-            -- Проверяем существование юнитов
+            -- Проверяем существование юнитов и обновляем их уровни
             for slot, unit in pairs(farmUnits) do
-                if unit and not unit.Parent then
+                if unit and unit.Parent then
+                    -- Пробуем получить реальный уровень юнита
+                    local realLevel = getUnitLevel(unit)
+                    if realLevel > farmLevels[slot] then
+                        farmLevels[slot] = realLevel
+                        updateUpgradeButtons()
+                        print("📊 Обновлен уровень " .. slot .. " до " .. realLevel)
+                    end
+                else
+                    -- Юнит был удален
                     farmUnits[slot] = nil
                     farmLevels[slot] = 0
                     updateUpgradeButtons()
