@@ -1,81 +1,34 @@
--- Функция для получения уровня юнита
-local function getUnitLevel(unit)
-    if not unit or not unit.Parent then return 0 end
-    
-    -- Пробуем разные способы получить уровень
-    -- 1. Атрибут Level
-    local level = unit:GetAttribute("Level")
-    if level then return level end
-    
-    -- 2. Ищем в HumanoidRootPart
-    local hrp = unit:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        level = hrp:GetAttribute("Level")
-        if level then return level end
-    end
-    
-    -- 3. Ищем ValueObject
-    local levelValue = unit:FindFirstChild("Level")
-    if levelValue and levelValue:IsA("IntValue") then
-        return levelValue.Value
-    end
-    
-    -- 4. Возвращаем сохраненный уровень
-    for slot, savedUnit in pairs(farmUnits) do
-        if savedUnit == unit then
-            return farmLevels[slot]
-        end
-    end
-    
-    return 0
-end-- Tower Defense Auto GUI с простой библиотекой
+-- Tower Defense Auto Sequence Script
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Загрузка библиотеки
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Grandg777/TDRblxSAS/refs/heads/main/inf.lua"))()
-
 -- Настройки
-local settings = {
-    autoSkip = false,
-    autoStart = false, 
-    autoReplay = false
+local CONFIG = {
+    AUTO_REPLAY = false, -- Измените на true чтобы включить авто реплей
 }
 
--- Переменные для защиты от спама
-local lastActions = {
-    skip = 0,
-    start = 0,
-    replay = 0
-}
-
--- Переменные для фарм юнитов
-local farmUnits = {
-    farm1 = nil,
-    farm2 = nil
-}
-
-local farmLevels = {
-    farm1 = 0,
-    farm2 = 0
-}
-
-local upgradePrices = {1100, 1500, 1500, 3000, 5000}
+-- Состояние скрипта
+local scriptEnabled = true
 local connections = {}
-local gui = nil
+local currentStep = 1
+local units = {}
 
--- UI элементы для обновления
-local uiElements = {
-    upgrade1Btn = nil,
-    upgrade2Btn = nil
+-- Позиции для спавна
+local POSITIONS = {
+    FARM1 = CFrame.new(-53.581634521484375, 55.58282470703125, -10.263553619384766, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    FARM2 = CFrame.new(-39.55238342285156, 55.58282470703125, -0.3068962097167969, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    FARM3 = CFrame.new(-36.67011260986328, 55.58282470703125, -25.443614959716797, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    FARM4 = CFrame.new(-53.415794372558594, 55.58282470703125, -27.08768081665039, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    BROLY = CFrame.new(-62.50544357299805, 61.46331787109375, -75.51477813720703, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    ICHIGO1 = CFrame.new(85.1407699584961, 55.58282470703125, 57.5001220703125, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+    ICHIGO2 = CFrame.new(119.20072174072266, 55.58282470703125, 57.84280776977539, 1, 0, 0, 0, 1, 0, 0, 0, 1)
 }
 
--- Функция для получения денег
+-- Функция получения денег
 local function getMoney()
     local success, money = pcall(function()
         return LocalPlayer:WaitForChild("Money", 5).Value
@@ -83,7 +36,7 @@ local function getMoney()
     return success and money or 0
 end
 
--- Функция для получения элементов UI игры
+-- Функция получения UI элементов
 local function getGameUI()
     local success, result = pcall(function()
         local gu = PlayerGui:FindFirstChild("GU")
@@ -107,139 +60,43 @@ local function getGameUI()
     return success and result or nil
 end
 
--- Функция для обновления текста кнопок улучшения
-local function updateUpgradeButtons()
-    if uiElements.upgrade1Btn and uiElements.upgrade1Btn.SetText then
-        pcall(function()
-            uiElements.upgrade1Btn:SetText("UF1 - " .. farmLevels.farm1 .. "/5")
-        end)
-    end
-    if uiElements.upgrade2Btn and uiElements.upgrade2Btn.SetText then
-        pcall(function()
-            uiElements.upgrade2Btn:SetText("UF2 - " .. farmLevels.farm2 .. "/5")
-        end)
-    end
-end
-
--- Функция для спавна фарм юнита
-local function spawnFarmUnit(position, farmSlot)
-    -- Проверка денег перед отправкой
-    local money = getMoney()
-    if money < 500 then
-        print("❌ Недостаточно денег для спавна (нужно 500, есть " .. money .. ")")
-        return false
-    end
-    
-    -- Проверяем существование RemoteEvent перед отправкой
+-- Функция спавна юнита
+local function spawnUnit(unitName, position)
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    if not remotes then
-        warn("❌ Remotes не найден")
-        return false
-    end
+    if not remotes then return false end
     
     local setEvent = remotes:FindFirstChild("SetEvent")
-    if not setEvent then
-        warn("❌ SetEvent remote не найден")
-        return false
-    end
+    if not setEvent then return false end
     
-    -- Отправляем запрос только если все проверки пройдены
     local success = pcall(function()
         local args = {
             "GameStuff",
             {
                 "Summon",
-                "Teiuchi",
+                unitName,
                 position
             }
         }
         setEvent:FireServer(unpack(args))
     end)
     
-    if success then
-        print("🏗️ Отправлен запрос на спавн фарм юнита " .. farmSlot)
-        
-        -- Ждем появления юнита и сохраняем ссылку
-        task.wait(1.5)
-        
-        local unitFolder = workspace:FindFirstChild("UnitFolder")
-        if unitFolder then
-            -- Ищем нового Teiuchi
-            local units = {}
-            for _, unit in pairs(unitFolder:GetChildren()) do
-                if unit.Name == "Teiuchi" and unit:IsA("Model") then
-                    table.insert(units, unit)
-                end
-            end
-            
-            -- Проверяем какие юниты уже сохранены
-            for _, unit in pairs(units) do
-                if farmSlot == "farm1" and not farmUnits.farm1 then
-                    -- Проверяем что этот юнит не farm2
-                    if unit ~= farmUnits.farm2 then
-                        farmUnits.farm1 = unit
-                        farmLevels.farm1 = 0
-                        print("✅ Фарм юнит 1 сохранен")
-                        updateUpgradeButtons()
-                        return true
-                    end
-                elseif farmSlot == "farm2" and not farmUnits.farm2 then
-                    -- Проверяем что этот юнит не farm1
-                    if unit ~= farmUnits.farm1 then
-                        farmUnits.farm2 = unit
-                        farmLevels.farm2 = 0
-                        print("✅ Фарм юнит 2 сохранен")
-                        updateUpgradeButtons()
-                        return true
-                    end
-                end
-            end
-        end
-    else
-        warn("❌ Ошибка при отправке запроса на спавн")
-    end
-    
-    return false
+    return success
 end
 
--- Функция для улучшения фарм юнита
-local function upgradeFarmUnit(farmSlot)
-    local unit = farmUnits[farmSlot]
-    if not unit or not unit.Parent then
-        print("❌ Фарм юнит " .. farmSlot .. " не найден или был удален")
-        farmUnits[farmSlot] = nil
-        farmLevels[farmSlot] = 0
-        updateUpgradeButtons()
-        return false
-    end
-    
-    local currentLevel = farmLevels[farmSlot]
-    if currentLevel >= 5 then
-        print("❌ Фарм юнит " .. farmSlot .. " уже максимального уровня")
-        return false
-    end
-    
-    local requiredMoney = upgradePrices[currentLevel + 1]
-    local money = getMoney()
-    if money < requiredMoney then
-        print("❌ Недостаточно денег для улучшения " .. farmSlot .. " (нужно " .. requiredMoney .. ", есть " .. money .. ")")
-        return false
-    end
-    
-    -- Проверяем существование RemoteFunction перед отправкой
+-- Функция улучшения юнита
+local function upgradeUnit(unitName)
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    if not remotes then
-        warn("❌ Remotes не найден")
-        return false
-    end
+    if not remotes then return false end
     
     local getFunction = remotes:FindFirstChild("GetFunction")
-    if not getFunction then
-        warn("❌ GetFunction remote не найден")
-        return false
-    end
+    if not getFunction then return false end
     
-    -- Отправляем запрос на улучшение только если все проверки пройдены
+    local unitFolder = workspace:FindFirstChild("UnitFolder")
+    if not unitFolder then return false end
+    
+    local unit = unitFolder:FindFirstChild(unitName)
+    if not unit then return false end
+    
     local success = pcall(function()
         local args = {
             {
@@ -247,95 +104,54 @@ local function upgradeFarmUnit(farmSlot)
             },
             {
                 "Upgrade",
-                unit -- Передаем конкретный объект юнита
+                unit
             }
         }
         getFunction:InvokeServer(unpack(args))
     end)
     
-    if success then
-        -- Ждем немного чтобы сервер обработал запрос
-        task.wait(0.5)
-        
-        -- Проверяем деньги после улучшения чтобы понять успешно ли
-        local newMoney = getMoney()
-        if newMoney < money then
-            -- Деньги потратились, значит улучшение прошло успешно
-            farmLevels[farmSlot] = currentLevel + 1
-            print("⬆️ Фарм юнит " .. farmSlot .. " улучшен до уровня " .. farmLevels[farmSlot])
-            updateUpgradeButtons()
-            return true
-        else
-            print("❌ Улучшение не произошло (деньги не потратились)")
-            return false
-        end
-    else
-        warn("❌ Ошибка при отправке запроса на улучшение фарм юнита " .. farmSlot)
-    end
-    
-    return false
+    return success
 end
 
--- Функции автоматизации
-local function sendSkip()
-    local currentTime = tick()
-    if currentTime - lastActions.skip < 5 then return end -- Защита от спама
-    
-    local success = pcall(function()
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
-        local gameStuff = remotes and remotes:FindFirstChild("GameStuff")
-        
-        if not gameStuff then
-            warn("❌ GameStuff remote не найден")
-            return
-        end
-        
-        local args = {"SkipVoteYes"}
-        gameStuff:FireServer(unpack(args))
-        lastActions.skip = currentTime
-    end)
-    
-    if success then
-        print("⏩ Скип отправлен")
-    end
-end
-
+-- Функция отправки старта
 local function sendStart()
-    local currentTime = tick()
-    if currentTime - lastActions.start < 5 then return end -- Защита от спама
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if not remotes then return false end
+    
+    local gameStuff = remotes:FindFirstChild("GameStuff")
+    if not gameStuff then return false end
     
     local success = pcall(function()
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
-        local gameStuff = remotes and remotes:FindFirstChild("GameStuff")
-        
-        if not gameStuff then
-            warn("❌ GameStuff remote не найден")
-            return
-        end
-        
-        local args = {"StartVoteYes"}
-        gameStuff:FireServer(unpack(args))
-        lastActions.start = currentTime
+        gameStuff:FireServer("StartVoteYes")
     end)
     
-    if success then
-        print("▶️ Старт отправлен")
-    end
+    return success
 end
 
-local function sendReplay()
-    local currentTime = tick()
-    if currentTime - lastActions.replay < 10 then return end -- Защита от спама
+-- Функция отправки скипа
+local function sendSkip()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if not remotes then return false end
+    
+    local gameStuff = remotes:FindFirstChild("GameStuff")
+    if not gameStuff then return false end
     
     local success = pcall(function()
-        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
-        local getFunction = remotes and remotes:FindFirstChild("GetFunction")
-        
-        if not getFunction then
-            warn("❌ GetFunction remote не найден")
-            return
-        end
-        
+        gameStuff:FireServer("SkipVoteYes")
+    end)
+    
+    return success
+end
+
+-- Функция отправки реплея
+local function sendReplay()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if not remotes then return false end
+    
+    local getFunction = remotes:FindFirstChild("GetFunction")
+    if not getFunction then return false end
+    
+    local success = pcall(function()
         local args = {
             {
                 Type = "Game",
@@ -344,279 +160,231 @@ local function sendReplay()
             }
         }
         getFunction:InvokeServer(unpack(args))
-        lastActions.replay = currentTime
     end)
     
-    if success then
-        print("🔄 Replay отправлен")
-    end
+    return success
 end
 
--- Создание GUI
-local function createGUI()
-    -- Создаем окно
-    local Window = Library:CreateWindow({
-        Name = "🎯 Tower Defense Auto",
-        Size = UDim2.new(0, 250, 0, 280)
-    })
+-- Основная последовательность
+local function executeStep()
+    if not scriptEnabled then return end
     
-    -- Auto функции
-    local autoSkipToggle = Window:CreateToggle({
-        Text = "Auto Skip",
-        Default = false,
-        Callback = function(value)
-            settings.autoSkip = value
-            print("🔧 Auto Skip: " .. (value and "включено" or "выключено"))
-        end
-    })
+    local money = getMoney()
     
-    local autoStartToggle = Window:CreateToggle({
-        Text = "Auto Start", 
-        Default = false,
-        Callback = function(value)
-            settings.autoStart = value
-            print("🔧 Auto Start: " .. (value and "включено" or "выключено"))
-        end
-    })
-    
-    local autoReplayToggle = Window:CreateToggle({
-        Text = "Auto Replay",
-        Default = false,
-        Callback = function(value)
-            settings.autoReplay = value
-            print("🔧 Auto Replay: " .. (value and "включено" or "выключено"))
-        end
-    })
-    
-    -- Кнопка показа денег
-    local moneyButton = Window:CreateButton({
-        Text = "💰 Show Money",
-        Callback = function()
-            local money = getMoney()
-            print("💰 Текущие деньги: " .. money)
-        end
-    })
-    
-    -- Разделитель
-    Window:CreateSeparator()
-    
-    -- Кнопки спавна
-    local spawnRow = Window:CreateButtonRow()
-    local spawn1Btn = spawnRow:AddButton({
-        Text = "Spawn F1",
-        Color = Color3.fromRGB(85, 255, 85),
-        Callback = function()
-            local position = CFrame.new(-53.786128997802734, 55.58282470703125, 1.467529296875, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-            spawnFarmUnit(position, "farm1")
-        end
-    })
-    
-    local spawn2Btn = spawnRow:AddButton({
-        Text = "Spawn F2",
-        Color = Color3.fromRGB(85, 255, 85),
-        Callback = function()
-            local position = CFrame.new(-40.75933074951172, 55.58282470703125, 2.94580078125, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-            spawnFarmUnit(position, "farm2")
-        end
-    })
-    
-    -- Кнопки улучшения
-    local upgradeRow = Window:CreateButtonRow()
-    
-    -- Создаем кнопки и сохраняем только сами кнопки, а не результат метода
-    local upgrade1BtnData = upgradeRow:AddButton({
-        Text = "UF1 - 0/5",
-        Color = Color3.fromRGB(255, 170, 85),
-        Callback = function()
-            -- Добавляем задержку чтобы не спамить
-            if not uiElements.upgrade1Cooldown then
-                uiElements.upgrade1Cooldown = true
-                upgradeFarmUnit("farm1")
+    if currentStep == 1 then
+        -- Ставим первую ферму
+        if money >= 500 then
+            if spawnUnit("Teiuchi", POSITIONS.FARM1) then
+                currentStep = 2
                 task.wait(1)
-                uiElements.upgrade1Cooldown = false
             end
         end
-    })
-    
-    local upgrade2BtnData = upgradeRow:AddButton({
-        Text = "UF2 - 0/5",
-        Color = Color3.fromRGB(255, 170, 85),
-        Callback = function()
-            -- Добавляем задержку чтобы не спамить
-            if not uiElements.upgrade2Cooldown then
-                uiElements.upgrade2Cooldown = true
-                upgradeFarmUnit("farm2")
-                task.wait(1)
-                uiElements.upgrade2Cooldown = false
-            end
-        end
-    })
-    
-    -- Сохраняем ссылки на методы SetText
-    uiElements.upgrade1Btn = upgrade1BtnData
-    uiElements.upgrade2Btn = upgrade2BtnData
-    
-    -- Периодическая проверка юнитов
-    task.spawn(function()
-        while Window.Enabled do
-            task.wait(1)
-            
-            -- Проверяем существование юнитов и обновляем их уровни
-            for slot, unit in pairs(farmUnits) do
-                if unit and unit.Parent then
-                    -- Пробуем получить реальный уровень юнита
-                    local realLevel = getUnitLevel(unit)
-                    if realLevel > farmLevels[slot] then
-                        farmLevels[slot] = realLevel
-                        updateUpgradeButtons()
-                        print("📊 Обновлен уровень " .. slot .. " до " .. realLevel)
-                    end
-                else
-                    -- Юнит был удален
-                    farmUnits[slot] = nil
-                    farmLevels[slot] = 0
-                    updateUpgradeButtons()
-                    print("⚠️ Фарм юнит " .. slot .. " был удален")
-                end
-            end
-        end
-    end)
-    
-    return Window
-end
-
--- Основная логика автоматизации
-local function startAutomation()
-    -- Переменные для отслеживания состояния
-    local skipState = {
-        lastVisible = false,
-        lastSent = 0
-    }
-    
-    local startState = {
-        lastVisible = false,
-        lastSent = 0
-    }
-    
-    local replayState = {
-        lastVisible = false,
-        visibleStartTime = 0,
-        sent = false
-    }
-    
-    local connection = RunService.Heartbeat:Connect(function()
-        if not gui or not gui.Enabled then return end
         
+    elseif currentStep == 2 then
+        -- Нажимаем Start
         local gameUI = getGameUI()
-        if not gameUI then return end
-        
-        local currentTime = tick()
-        
-        -- Auto Skip
-        if settings.autoSkip and gameUI.skipButton then
-            local isVisible = gameUI.skipButton.Visible
-            
-            -- Отправляем только при появлении кнопки и если прошло достаточно времени
-            if isVisible and not skipState.lastVisible and (currentTime - skipState.lastSent) > 10 then
-                sendSkip()
-                skipState.lastSent = currentTime
+        if gameUI and gameUI.startButton and gameUI.startButton.Visible then
+            if sendStart() then
+                currentStep = 3
+                task.wait(2)
             end
-            
-            skipState.lastVisible = isVisible
         end
         
-        -- Auto Start
-        if settings.autoStart and gameUI.startButton then
-            local isVisible = gameUI.startButton.Visible
-            
-            -- Отправляем только при появлении кнопки и если прошло достаточно времени
-            if isVisible and not startState.lastVisible and (currentTime - startState.lastSent) > 10 then
-                sendStart()
-                startState.lastSent = currentTime
+    elseif currentStep == 3 then
+        -- Ждем денег и ставим вторую ферму
+        if money >= 500 then
+            if spawnUnit("Teiuchi", POSITIONS.FARM2) then
+                currentStep = 4
+                task.wait(1)
             end
-            
-            startState.lastVisible = isVisible
         end
         
-        -- Auto Replay
-        if settings.autoReplay and gameUI.resultFrame then
-            local isVisible = gameUI.resultFrame.Visible
-            
-            if isVisible then
-                -- Если результат только появился
-                if not replayState.lastVisible then
-                    replayState.visibleStartTime = currentTime
-                    replayState.sent = false
-                    print("⏱️ Результат показан, жду 5 секунд для Replay...")
+    elseif currentStep == 4 then
+        -- Ждем денег и ставим 3 и 4 фермы
+        if money >= 1000 then
+            if spawnUnit("Teiuchi", POSITIONS.FARM3) then
+                task.wait(0.5)
+                if spawnUnit("Teiuchi", POSITIONS.FARM4) then
+                    currentStep = 5
+                    task.wait(1)
                 end
-                
-                -- Отправляем через 5 секунд, но только один раз
-                if not replayState.sent and (currentTime - replayState.visibleStartTime) >= 5 then
-                    sendReplay()
-                    replayState.sent = true
-                end
-            else
-                -- Сбрасываем состояние когда результат скрыт
-                if replayState.lastVisible then
-                    replayState.visibleStartTime = 0
-                    replayState.sent = false
+            end
+        end
+        
+    elseif currentStep == 5 then
+        -- Ждем 1100 и ставим Broly
+        if money >= 1100 then
+            if spawnUnit("Broly", POSITIONS.BROLY) then
+                currentStep = 6
+                units.broly = {level = 0}
+                task.wait(1)
+            end
+        end
+        
+    elseif currentStep == 6 then
+        -- Качаем Broly первый раз (2600)
+        if money >= 2600 and units.broly.level < 1 then
+            if upgradeUnit("Broly") then
+                units.broly.level = 1
+                currentStep = 7
+                task.wait(1)
+            end
+        end
+        
+    elseif currentStep == 7 then
+        -- Качаем Broly второй раз (4100)
+        if money >= 4100 and units.broly.level < 2 then
+            if upgradeUnit("Broly") then
+                units.broly.level = 2
+                currentStep = 8
+                task.wait(1)
+            end
+        end
+        
+    elseif currentStep == 8 then
+        -- Ждем 1800 и ставим первого Ichigo
+        if money >= 1800 then
+            if spawnUnit("Ichigo5", POSITIONS.ICHIGO1) then
+                currentStep = 9
+                units.ichigo1 = {level = 0}
+                task.wait(1)
+            end
+        end
+        
+    elseif currentStep >= 9 and currentStep <= 15 then
+        -- Качаем первого Ichigo (7 уровней)
+        local upgradeCosts = {2250, 3500, 4550, 6300, 8800, 9250, 10950}
+        local level = currentStep - 9
+        
+        if money >= upgradeCosts[level + 1] and units.ichigo1.level < level + 1 then
+            if upgradeUnit("Ichigo5") then
+                units.ichigo1.level = level + 1
+                currentStep = currentStep + 1
+                task.wait(1)
+            end
+        end
+        
+    elseif currentStep == 16 then
+        -- Ставим второго Ichigo
+        if money >= 1800 then
+            if spawnUnit("Ichigo5", POSITIONS.ICHIGO2) then
+                currentStep = 17
+                units.ichigo2 = {level = 0}
+                task.wait(1)
+            end
+        end
+        
+    elseif currentStep >= 17 then
+        -- Качаем второго Ichigo насколько хватит денег
+        local upgradeCosts = {2250, 3500, 4550, 6300, 8800, 9250, 10950}
+        local level = units.ichigo2.level
+        
+        if level < 7 and money >= upgradeCosts[level + 1] then
+            -- Находим второго Ichigo по позиции
+            task.wait(0.5) -- Даем время на обновление
+            local unitFolder = workspace:FindFirstChild("UnitFolder")
+            if unitFolder then
+                for _, unit in pairs(unitFolder:GetChildren()) do
+                    if unit.Name == "Ichigo5" and unit ~= units.ichigo1_ref then
+                        units.ichigo2_ref = unit
+                        break
+                    end
                 end
             end
             
-            replayState.lastVisible = isVisible
+            if upgradeUnit("Ichigo5") then
+                units.ichigo2.level = level + 1
+                task.wait(1)
+            end
         end
-    end)
-    
-    table.insert(connections, connection)
+    end
 end
 
--- Функция закрытия GUI
-local function closeGUI()
-    -- Отключаем все автоматические функции
-    settings.autoSkip = false
-    settings.autoStart = false
-    settings.autoReplay = false
+-- Автоматический старт
+local startConnection
+startConnection = RunService.Heartbeat:Connect(function()
+    if not scriptEnabled then return end
     
-    -- Отключаем все соединения
-    for _, connection in ipairs(connections) do
-        if connection then
-            connection:Disconnect()
+    local gameUI = getGameUI()
+    if gameUI and gameUI.startButton and gameUI.startButton.Visible then
+        sendStart()
+    end
+end)
+table.insert(connections, startConnection)
+
+-- Автоматический реплей (если включен)
+local replayConnection
+local replayTimer = 0
+local replayReady = false
+
+replayConnection = RunService.Heartbeat:Connect(function()
+    if not scriptEnabled or not CONFIG.AUTO_REPLAY then return end
+    
+    local gameUI = getGameUI()
+    if gameUI and gameUI.resultFrame and gameUI.resultFrame.Visible then
+        if not replayReady then
+            replayReady = true
+            replayTimer = tick()
+        elseif tick() - replayTimer >= 5 then
+            sendReplay()
+            -- Сбрасываем состояние для нового раунда
+            currentStep = 1
+            units = {}
+            replayReady = false
         end
+    else
+        replayReady = false
     end
-    connections = {}
+end)
+table.insert(connections, replayConnection)
+
+-- Основной цикл
+local mainConnection
+mainConnection = RunService.Heartbeat:Connect(function()
+    if not scriptEnabled then return end
+    executeStep()
+end)
+table.insert(connections, mainConnection)
+
+-- Создание простого GUI для выключения
+local function createControlGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "TDAutoControl"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = PlayerGui
     
-    -- Обнуляем ссылки на юнитов
-    farmUnits = {
-        farm1 = nil,
-        farm2 = nil
-    }
-    farmLevels = {
-        farm1 = 0,
-        farm2 = 0
-    }
+    local destroyButton = Instance.new("TextButton")
+    destroyButton.Name = "DestroyButton"
+    destroyButton.Size = UDim2.new(0, 100, 0, 50)
+    destroyButton.Position = UDim2.new(0, 10, 0, 10)
+    destroyButton.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
+    destroyButton.BorderSizePixel = 0
+    destroyButton.Text = "STOP\nSCRIPT"
+    destroyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    destroyButton.TextScaled = true
+    destroyButton.Font = Enum.Font.SourceSansBold
+    destroyButton.Parent = screenGui
     
-    -- Закрываем GUI
-    if gui then
-        gui.Enabled = false
-        gui = nil
-    end
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = destroyButton
     
-    print("✅ GUI закрыт, все функции отключены")
+    destroyButton.MouseButton1Click:Connect(function()
+        scriptEnabled = false
+        
+        -- Отключаем все соединения
+        for _, connection in ipairs(connections) do
+            if connection then
+                connection:Disconnect()
+            end
+        end
+        
+        -- Удаляем GUI
+        screenGui:Destroy()
+    end)
+    
+    return screenGui
 end
 
 -- Запуск
-print("🚀 Запуск Tower Defense Auto GUI...")
-gui = createGUI()
-
-if gui then
-    startAutomation()
-    print("✅ GUI создан! Используй Toggle'ы для автоматизации.")
-    
-    -- Привязываем закрытие к кнопке X в GUI
-    -- (Кнопка закрытия уже встроена в библиотеку)
-else
-    print("❌ Не удалось создать GUI")
-end
-
--- Глобальная функция для закрытия
-_G.CloseTowerDefenseAuto = closeGUI
+createControlGUI()
